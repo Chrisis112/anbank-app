@@ -1,0 +1,42 @@
+# Операционная система
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vercel/Next.js
+.next/
+out/
+.vercel/
+.env
+.env.*
+!.env.example
+
+# VS Code и JetBrains
+.vscode/
+.idea/
+
+# Coverage
+coverage/
+*.lcov
+
+# Логи
+*.log
+
+# build
+dist/
+build/
+
+# MacOS
+*.DS_Store
+
+# Остальные временные файлы
+*.local
+*.swp
+*.swo
+*.swn

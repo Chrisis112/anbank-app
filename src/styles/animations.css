@@ -1,0 +1,102 @@
+/* ======== Общие анимации для CryptoChat ======== */
+
+/* Плавное появление */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in {
+  animation: fade-in 0.5s ease forwards;
+}
+
+/* Плавное исчезновение */
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.fade-out {
+  animation: fade-out 0.5s ease forwards;
+}
+
+/* Появление снизу */
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.slide-up {
+  animation: slide-up 0.4s ease forwards;
+}
+
+/* Появление сверху */
+@keyframes slide-down {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.slide-down {
+  animation: slide-down 0.4s ease forwards;
+}
+
+/* Появление слева */
+@keyframes slide-left {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.slide-left {
+  animation: slide-left 0.4s ease forwards;
+}
+
+/* Появление справа */
+@keyframes slide-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.slide-right {
+  animation: slide-right 0.4s ease forwards;
+}
+
+/* Пульс */
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}
+.pulse {
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+/* Неоновое свечение */
+@keyframes neon-glow {
+  0%, 100% { text-shadow: 0 0 5px #00f0ff, 0 0 10px #00f0ff, 0 0 20px #00f0ff; }
+  50% { text-shadow: 0 0 10px #4f46e5, 0 0 20px #4f46e5, 0 0 40px #4f46e5; }
+}
+.neon {
+  animation: neon-glow 2s infinite alternate;
+}
+
+/* Плавающий элемент (для крипто-coin) */
+@keyframes float {
+  0% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-10px) rotate(180deg); }
+  100% { transform: translateY(0) rotate(360deg); }
+}
+.float {
+  animation: float 8s infinite linear;
+}
+
+/* Плавное появление сообщения в чате */
+@keyframes message-in {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.message-in {
+  animation: message-in 0.3s ease forwards;
+}
+
+/* Эффект "волн" вокруг объекта */
+@keyframes ripple {
+  0% { box-shadow: 0 0 0 0 rgba(0, 240, 255, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(0, 240, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 240, 255, 0); }
+}
+.ripple {
+  animation: ripple 1.5s infinite;
+}
