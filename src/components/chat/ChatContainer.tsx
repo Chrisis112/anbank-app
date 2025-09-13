@@ -75,6 +75,31 @@ const convertPrivateMessageToMessage = (privateMsg: any): Message => {
   return newReactions;
 };
 
+const deleteMessage = async (messageId: string) => {
+  if (!user) return;
+
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('No auth token');
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+
+    await axios.delete(`${baseUrl}/chat/messages/${messageId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    // Локально обновляем список сообщений
+    setMessages(prev => prev.filter(msg => msg.id !== messageId));
+
+    // Отправьте событие сокетам, если нужно оповестить других об удалении
+    socketRef.current?.emit('deleteMessage', { messageId, chatId });
+
+  } catch (error) {
+    alert('Ошибка удаления сообщения');
+  }
+};
+
+
   // Инициализация и подписка сокета
   useEffect(() => {
     if (!user) return;
@@ -346,8 +371,8 @@ const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
   try {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('No auth token');
-
-    const { data } = await axios.get('/api/upload-url', {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const { data } = await axios.get(`${baseUrl}/upload-url`, {
       params: { filename: file.name, filetype: file.type },
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -412,7 +437,6 @@ const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     <div className="flex-1 overflow-y-auto p-4 space-y-3">
 {messages.map(msg => {
   const sender = userCache[msg.senderId];
-  // передай в ChatContainer проп onlineUsers из ChatPage!
   const isSenderOnline = Array.isArray(onlineUsers)
     ? onlineUsers.some(u => u.id === msg.senderId)
     : false;
@@ -427,7 +451,8 @@ const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
           isMine={msg.senderId === myUserId}
           leftAddon={isSenderOnline ? <StarIndicator /> : null}
           myUserId={myUserId}
-          chatId={msg.chatId}                    // Передаем chatId в MessageItem
+          chatId={msg.chatId}  
+          onDelete={() => deleteMessage(msg.id)}                  // Передаем chatId в MessageItem
           onSelectChat={onUserClick}             // Ожидается, что onUserClick принимает chatId
           addReaction={addReaction}
           renderRole={renderRole}

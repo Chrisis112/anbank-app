@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
@@ -19,7 +18,6 @@ import {
 type Role = 'newbie' | 'advertiser' | 'creator';
 
 export default function RegistrationForm() {
-  const { t } = useTranslation('common');
   const router = useRouter();
   const register = useAuthStore((state) => state.register);
   const { setUser } = useUserStore(); // Для установки пользователя при логине
@@ -161,11 +159,11 @@ const handleRegisterSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
 
   if (!nickname || !email || !password || !confirmPassword) {
-    toast.error(`${t('error')}: ${t('fillAllFields')}`);
+    toast.error(`Fill all fields`);
     return;
   }
   if (password !== confirmPassword) {
-    toast.error(`${t('error')}: Passwords do not match`);
+    toast.error(`Passwords do not match`);
     return;
   }
 
@@ -174,12 +172,12 @@ const handleRegisterSubmit = async (e: React.FormEvent) => {
   // Проверка уникальности email и никнейма
   const { emailExists, nicknameExists } = await checkUnique(email, nickname);
   if (emailExists) {
-    toast.error(t('emailAlreadyUsed') || 'Email is already in use');
+    toast.error('Email is already in use');
     setLoading(false);
     return;
   }
   if (nicknameExists) {
-    toast.error(t('nicknameAlreadyUsed') || 'Nickname is already in use');
+    toast.error('Nickname is already in use');
     setLoading(false);
     return;
   }
@@ -200,10 +198,10 @@ const handleRegisterSubmit = async (e: React.FormEvent) => {
       setLoading(false);
 
       if (result.success) {
-        toast.success(t('registrationSuccess') || 'Registration successful!');
+        toast.success('Registration successful!');
         router.push('/chat');
       } else {
-        toast.error(result.error || t('registrationFailed') || 'Registration failed');
+        toast.error(result.error || 'Registration failed');
       }
       return; // Важно прервать дальнейшее выполнение, иначе пойдет оплата
     }
@@ -211,14 +209,14 @@ const handleRegisterSubmit = async (e: React.FormEvent) => {
     // Иначе проводим оплату через Phantom Wallet
     const paymentSignature = await handlePhantomPayment();
     if (!paymentSignature) {
-      toast.error(t('paymentFailed') || 'Payment failed');
+      toast.error(  'Payment failed');
       setLoading(false);
       return;
     }
 
     const solanaPublicKey = (window as any).solana?.publicKey?.toBase58();
     if (!solanaPublicKey) {
-      toast.error(t('phantomKeyError') || 'Failed to get public key');
+      toast.error( 'Failed to get public key');
       setLoading(false);
       return;
     }
@@ -237,14 +235,14 @@ const handleRegisterSubmit = async (e: React.FormEvent) => {
     setLoading(false);
 
     if (result.success) {
-      toast.success(t('registrationSuccess') || 'Registration successful!');
+      toast.success( 'Registration successful!');
       router.push('/chat');
     } else {
-      toast.error(result.error || t('registrationFailed') || 'Registration failed');
+      toast.error(result.error ||  'Registration failed');
     }
   } catch {
     setLoading(false);
-    toast.error(t('registrationFailed') || 'Registration failed');
+    toast.error( 'Registration failed');
   }
 };
 
@@ -291,11 +289,11 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
         setIsSubscriptionModalOpen(true); // Открываем окно продления подписки
       } else {
         setLoginError(
-          err.response?.data?.error || t('login_error', 'Login error. Check your email and password.')
+          err.response?.data?.error ||  'Login error. Check your email and password.'
         );
       }
     } else {
-      setLoginError(t('login_error', 'Login error. Check your email and password.'));
+      setLoginError( 'Login error. Check your email and password.');
     }
   } finally {
     setLoginLoading(false);
@@ -447,7 +445,7 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
             </button>
 
             <h2 className="text-2xl font-orbitron gradient-title mb-6 text-center text-crypto-accent">
-              {t('login') || 'Login'}
+              { 'Login'}
             </h2>
 
             {loginError && (
@@ -462,7 +460,7 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
             <form onSubmit={handleLoginSubmit} className="space-y-4" noValidate>
               <div>
                 <label htmlFor="loginEmail" className="block text-sm mb-1 text-white font-semibold">
-                  {t('email') || 'Email'}
+                  { 'Email'}
                 </label>
                 <input
                   type="email"
@@ -479,7 +477,7 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
 
               <div>
                 <label htmlFor="loginPassword" className="block text-sm mb-1 text-white font-semibold">
-                  {t('password') || 'Password'}
+                  { 'Password'}
                 </label>
                 <input
                   type="password"
@@ -498,7 +496,7 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
                 disabled={loginLoading}
                 className="w-full py-3 rounded-lg font-bold transition-colors text-lg bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loginLoading ? (t('loading') || 'Loading...') : (t('loginButton') || 'Login')}
+                {loginLoading ? ( 'Loading...') : ( 'Login')}
               </button>
             </form>
           </div>

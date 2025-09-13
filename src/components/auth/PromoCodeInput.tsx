@@ -38,17 +38,17 @@ export default function PromoCodeInput({
         );
         if (data.valid) {
           setIsValid(true);
-          setMessage(data.description || 'Промо-код действителен!');
+          setMessage(data.description || 'Promo code is valid!');
           onSuccess(value);
         } else {
           setIsValid(false);
-          setMessage(data.message || 'Промо-код недействителен или истёк.');
-          onFail?.(data.message || 'Промо-код недействителен.');
+          setMessage(data.message || 'The promotional code is invalid or has expired.');
+          onFail?.(data.message || 'Promo code is invalid.');
         }
       } catch (error: any) {
         setIsValid(false);
-        setMessage(error?.response?.data?.error || 'Ошибка проверки промо-кода.');
-        onFail?.(error?.response?.data?.error || 'Ошибка проверки.');
+        setMessage(error?.response?.data?.error || 'Error checking promo code.');
+        onFail?.(error?.response?.data?.error || 'Verification error.');
       } finally {
         setIsChecking(false);
       }
@@ -59,40 +59,9 @@ export default function PromoCodeInput({
     }
   };
 
-  // Ручная проверка, если нужна кнопка
-  const manualCheck = async () => {
-    if (!promoCode || promoCode.length < 5) {
-      setMessage('Введите промо-код полностью.');
-      setIsValid(null);
-      return;
-    }
-    setIsChecking(true);
-    try {
-      const { data } = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/validate-promo`,
-        { promoCode }
-      );
-      if (data.valid) {
-        setIsValid(true);
-        setMessage(data.description || 'Промо-код действителен!');
-        onSuccess(promoCode);
-      } else {
-        setIsValid(false);
-        setMessage(data.message || 'Промо-код недействителен или истёк.');
-        onFail?.(data.message || 'Промо-код недействителен.');
-      }
-    } catch (error: any) {
-      setIsValid(false);
-      setMessage(error?.response?.data?.error || 'Ошибка проверки промо-кода.');
-      onFail?.(error?.response?.data?.error || 'Ошибка проверки.');
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
   return (
     <div className={`w-full ${className}`}>
-      <label className="block mb-1 text-white font-semibold">Промо-код (если есть)</label>
+      <label className="block mb-1 text-white font-semibold">Promo code (if any)</label>
       <div className="relative">
         <input
           type="text"
@@ -107,7 +76,7 @@ export default function PromoCodeInput({
               ? 'border-red-500 focus:ring-red-500'
               : 'border-crypto-accent focus:ring-crypto-accent'}
           `}
-          placeholder="Введите промо-код"
+          placeholder="Enter promo code"
         />
         {/* Индикация проверки */}
         {isChecking && (
@@ -136,16 +105,6 @@ export default function PromoCodeInput({
           {message}
         </p>
       )}
-
-      {/* Кнопка ручной проверки (по желанию) */}
-      {/* <button
-        type="button"
-        onClick={manualCheck}
-        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        disabled={!promoCode || isChecking}
-      >
-        Проверить промо-код
-      </button> */}
     </div>
   );
 }

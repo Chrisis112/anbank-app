@@ -10,8 +10,8 @@ import { FaDownload } from 'react-icons/fa';
 interface MessageItemProps {
   msg: Message;
   user: any; // текущий пользователь
-   chatId: string;
-   leftAddon?: React.ReactNode;
+  chatId: string;
+  leftAddon?: React.ReactNode;
   sender?: UserPreview; // отправитель (из кэша)
   isMine: boolean;
   myUserId: string;
@@ -19,6 +19,7 @@ interface MessageItemProps {
   addReaction: (msgId: string, reaction: string) => void;
   renderRole: (role?: string) => JSX.Element | null;
   onDownloadFile?: () => void;
+  onDelete?: () => void; // Добавлено
 }
 
 export default function MessageItem({
@@ -32,11 +33,11 @@ export default function MessageItem({
   renderRole,
   leftAddon,
   onDownloadFile,
+  onDelete // Добавлено
 }: MessageItemProps) {
   const [showReactions, setShowReactions] = useState(false);
   const mainRole = sender?.role || 'newbie';
 
-  
   // Функция скачивания файла (для изображения)
   const downloadFile = () => {
     if (msg.type === 'image') {
@@ -51,22 +52,21 @@ export default function MessageItem({
     }
   };
 
-
-   const handleAvatarClick = () => {
-  if (!isMine && sender?.id && onSelectChat) {
-    onSelectChat(sender.id);
-  }
-};
-const handleMyAvatarClick = () => {
-  if (isMine && user?.id && onSelectChat) {
-    onSelectChat(user.id);
-  }
-};
-const filteredReactions = Object.entries(msg.reactions ?? {}).filter(
-  ([emoji, userIds]) => 
-    Array.isArray(userIds) && 
-    userIds.some(u => typeof u === 'string' && u.trim() !== ' ')
-);
+  const handleAvatarClick = () => {
+    if (!isMine && sender?.id && onSelectChat) {
+      onSelectChat(sender.id);
+    }
+  };
+  const handleMyAvatarClick = () => {
+    if (isMine && user?.id && onSelectChat) {
+      onSelectChat(user.id);
+    }
+  };
+  const filteredReactions = Object.entries(msg.reactions ?? {}).filter(
+    ([emoji, userIds]) =>
+      Array.isArray(userIds) &&
+      userIds.some(u => typeof u === 'string' && u.trim() !== ' ')
+  );
 
   return (
     <div
@@ -80,34 +80,32 @@ const filteredReactions = Object.entries(msg.reactions ?? {}).filter(
         <div
           className="flex-shrink-0 cursor-pointer hover:scale-110 transition"
           onClick={handleAvatarClick}
-          
           title={`Открыть личный чат с ${sender?.nickname ?? 'пользователем'}`}
         >
-<div className="relative w-10 h-10 inline-block">
-  <img
-    src={sender?.photoUrl || '/default-avatar.png'}
-    alt={sender?.nickname || ''}
-    className="w-10 h-10 rounded-full object-cover border border-gray-500"
-  />
-  {/* Звезда: маленькая, строго поверх в нужном месте */}
-  {leftAddon && (
-    <span
-      className="absolute bottom-0 right-0 z-10"
-    style={{
-      transform: 'translate(40%, 40%)',
-      pointerEvents: 'none',
-      width: '14px',
-      height: '14px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}
-    >
-      {leftAddon}
-    </span>
-  )}
-</div>
-
+          <div className="relative w-10 h-10 inline-block">
+            <img
+              src={sender?.photoUrl || '/default-avatar.png'}
+              alt={sender?.nickname || ''}
+              className="w-10 h-10 rounded-full object-cover border border-gray-500"
+            />
+            {/* Звезда: маленькая, строго поверх в нужном месте */}
+            {leftAddon && (
+              <span
+                className="absolute bottom-0 right-0 z-10"
+                style={{
+                  transform: 'translate(40%, 40%)',
+                  pointerEvents: 'none',
+                  width: '14px',
+                  height: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {leftAddon}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -121,6 +119,22 @@ const filteredReactions = Object.entries(msg.reactions ?? {}).filter(
         <span className="text-xs mb-0 font-bold flex items-center gap-1">
           {isMine ? user.nickname || 'You' : sender?.nickname || 'Guest'}
           {renderRole(mainRole)}
+          {/* Добавлена кнопка удаления для своих сообщений */}
+          {isMine && onDelete && (
+            <button
+              className="ml-2 text-red-500 hover:text-red-700 focus:outline-none"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm('Удалить сообщение?')) {
+                  onDelete();
+                }
+              }}
+              aria-label="Delete message"
+              title="Удалить сообщение"
+            >
+              🗑️
+            </button>
+          )}
         </span>
 
         {/* Бабл с текстом или изображением */}
@@ -207,5 +221,3 @@ const filteredReactions = Object.entries(msg.reactions ?? {}).filter(
     </div>
   );
 }
-
-

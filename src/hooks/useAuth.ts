@@ -38,6 +38,8 @@ export function useAuth(): UseAuthResult {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const API = process.env.NEXT_PUBLIC_API_URL || 'https://api.anbanktoken.com/api';
+
 
   // Проверка токена и получение пользователя
     const fetchUser = useCallback(async () => {
@@ -51,7 +53,7 @@ export function useAuth(): UseAuthResult {
         return;
       }
 
-      const res = await axios.get<User>('/api/users/me', {
+      const res = await axios.get<User>(`${API}/users/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUser(res.data);
@@ -78,7 +80,7 @@ export function useAuth(): UseAuthResult {
     setLoading(true);
     setError(null);
     try {
-      const res = await axios.post<{ token: string }>('/api/auth/login', {
+      const res = await axios.post<{ token: string }>(`${API}/auth/login`, {
         email,
         password,
       });
@@ -106,7 +108,7 @@ export function useAuth(): UseAuthResult {
   setLoading(true);
   setError(null);
   try {
-    await axios.post('/api/auth/register', data);
+    await axios.post(`${API}/auth/register`, data);
     await login(data.email, data.password);
   } catch (catchError: unknown) {
     let message = 'Registration error';
@@ -136,11 +138,11 @@ export function useAuth(): UseAuthResult {
 
   // Социальный вход запускает редирект на серверный маршрут OAuth
   const loginWithGoogle = () => {
-    window.location.href = '/api/auth/google';
+    window.location.href = `${API}/auth/google`;
   };
 
   const loginWithFacebook = () => {
-    window.location.href = '/api/auth/facebook';
+    window.location.href = `${API}/auth/facebook`;
   };
 
   return {

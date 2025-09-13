@@ -23,9 +23,6 @@ export default function CryptoBackground() {
       <div className="crypto-particle"></div>
       <div className="crypto-particle"></div>
       <div className="crypto-particle"></div>
-      <div className="floating-coin coin-1">₿</div>
-      <div className="floating-coin coin-2">Ξ</div>
-      <div className="floating-coin coin-3">◎</div>
     </div>
   )
 }

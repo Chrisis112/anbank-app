@@ -2,7 +2,6 @@
 
 import { useState, useRef } from "react";
 import axios from "axios";
-import { useTranslation } from 'react-i18next';
 
 interface ProfilePhotoProps {
   currentPhotoUrl?: string;
@@ -10,7 +9,6 @@ interface ProfilePhotoProps {
 }
 
 export default function ProfilePhoto({ currentPhotoUrl, onUpload }: ProfilePhotoProps) {
-  const { t } = useTranslation();
 
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +23,7 @@ export default function ProfilePhoto({ currentPhotoUrl, onUpload }: ProfilePhoto
   };
 
   const handlePhotoClick = () => {
-    if (window.confirm(t('confirm_change_photo', 'Do you wana change prfile photo?'))) {
+    if (window.confirm( 'Do you wana change prfile photo?')) {
       if (inputRef.current) {
         inputRef.current.value = ""; // сброс, чтобы можно было выбрать тот же файл
       }
@@ -42,7 +40,7 @@ export default function ProfilePhoto({ currentPhotoUrl, onUpload }: ProfilePhoto
 
     const token = localStorage.getItem("token");
     if (!token) {
-      alert(t('error_not_authorized', 'You are not authorized.'));
+      alert( 'You are not authorized.');
       return;
     }
 
@@ -65,7 +63,7 @@ export default function ProfilePhoto({ currentPhotoUrl, onUpload }: ProfilePhoto
       onUpload?.(photoUrl);
       setFile(null); // сброс
     } catch (error) {
-      alert(t('error_upload_failed', 'File upploading error.'));
+      alert(( 'File upploading error.'));
       if (error instanceof Error) {
       }
     } finally {
@@ -82,7 +80,7 @@ export default function ProfilePhoto({ currentPhotoUrl, onUpload }: ProfilePhoto
           onClick={handlePhotoClick}
           role="button"
           tabIndex={0}
-          aria-label={t('profile_photo_edit_label', 'Change Profile Photo')}
+          aria-label={( 'Change Profile Photo')}
           onKeyDown={e => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -92,7 +90,7 @@ export default function ProfilePhoto({ currentPhotoUrl, onUpload }: ProfilePhoto
         >
           <img
             src={currentPhotoUrl}
-            alt={t('profile_photo_alt', 'Profile Photo')}
+            alt={( 'Profile Photo')}
             className="w-24 h-24 object-cover rounded-full border transition"
             draggable={false}
           />
@@ -134,7 +132,7 @@ export default function ProfilePhoto({ currentPhotoUrl, onUpload }: ProfilePhoto
             className={`bg-indigo-600 text-white px-4 py-2 rounded transition hover:bg-indigo-700
               ${loading ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
           >
-            {loading ? t('loading', 'Loading...') : t('save', 'Save')}
+            {loading ? ( 'Loading...') : ( 'Save')}
           </button>
         </div>
       )}
@@ -143,9 +141,9 @@ export default function ProfilePhoto({ currentPhotoUrl, onUpload }: ProfilePhoto
         <button
           onClick={() => inputRef.current?.click()}
           className="bg-indigo-600 text-white px-4 py-2 rounded transition hover:bg-indigo-700 cursor-pointer"
-          aria-label={t('upload_profile_photo', 'Upload Profile Photo')}
+          aria-label={( 'Upload Profile Photo')}
         >
-          {t('upload_profile_photo', 'Upload Profile Photo')}
+          {( 'Upload Profile Photo')}
         </button>
       )}
     </div>

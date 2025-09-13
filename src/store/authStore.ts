@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import axios from "axios";
-import i18next from "i18next";
 
 export type UserRole = "newbie" | "advertiser" | "creator"| "admin"
 
@@ -146,6 +145,5 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   setLanguage(lang) {
-    i18next.changeLanguage(lang);
   },
 }));

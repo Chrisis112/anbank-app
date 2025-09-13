@@ -4,18 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "../../store/authStore";
 import { FaBars } from "react-icons/fa";
-import { useRouter } from "next/navigation";
-
 export default function Header() {
 
   const { user, logout } = useAuthStore();
   const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const router = useRouter();
-
-  const handleLogout = () => {
-    logout();
-    router.push("/login");
-  };
 
   return (
     <header className="bg-gray-900 border-b border-gray-800 text-white">
@@ -25,9 +17,6 @@ export default function Header() {
       />
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3">
         {/* Логотип */}
-        <Link href="/chat" className="text-xl font-bold text-indigo-400">
-Anbank Token
-        </Link>
 
         {/* Десктоп меню */}
         <nav className="hidden md:flex items-center gap-6">
