@@ -134,7 +134,8 @@ useEffect(() => {
         });
 
         // ИСПРАВЛЕН порядок параметров: data, nonce, phantomPublicKey, dappPrivateKey
-        const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
+const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
+
 
         if (!decrypted) {
           console.error('Failed to decrypt payload');
@@ -253,6 +254,33 @@ useEffect(() => {
 
   return () => abortControllerRef.current?.abort();
 }, []);
+useEffect(() => {
+  async function processCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const nonce = params.get('nonce');
+    const data = params.get('data');
+    const errorCode = params.get('errorCode');
+
+    if (errorCode) {
+      // Обработка ошибок Phantom
+      toast.error(`Phantom error: ${params.get('errorMessage') || errorCode}`);
+       clearPhantomStorage();
+      return;
+    }
+
+    if (nonce && data) {
+      await handlePhantomCallback(decodeURIComponent(nonce), decodeURIComponent(data));
+       clearPhantomStorage();
+    }
+  }
+
+  processCallback();
+
+  return () => {
+    abortControllerRef.current?.abort();  // для отмены запросов, если нужно
+  }
+}, []);
+
 
 // Утилита очистки localStorage
 function clearPhantomStorage() {
