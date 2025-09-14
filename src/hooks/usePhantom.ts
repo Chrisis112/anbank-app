@@ -35,7 +35,7 @@ export function usePhantom() {
     }
     setDappKeys({ publicKey: pub, privateKey: priv });
 
-    // Инициализация Phantom публичного ключа
+    // Инициализация Phantom публичного ключа (если есть)
     const savedPhantomKey = localStorage.getItem('phantom_user_public_key');
     if (savedPhantomKey) {
       setPhantomPublicKey(savedPhantomKey);
@@ -84,7 +84,6 @@ export function usePhantom() {
     return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
   }
 
-  // Подключение к Phantom на мобильном
   async function connectPhantomMobile() {
     try {
       if (!dappKeys) {
@@ -105,7 +104,6 @@ export function usePhantom() {
     }
   }
 
-  // Обработка callback Phantom с дополнительным логированием
   async function processCallbackFromUrl() {
     if (typeof window === 'undefined') return;
 
@@ -137,13 +135,34 @@ export function usePhantom() {
       });
 
       const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
+
+      // Для подключения используем публичный ключ из расшифрованных данных, а не из localStorage
+      // Пробуем расшифровать с пустым ключом Phantom, чтобы получить decrypted.public_key
+      // Обычно Phantom public key идёт в decrypted.public_key после расшифровки.
+
+      // На первом шаге не используем phantomPublicKeyInStorage, потому что его может не быть
+      const decryptedForConnect = decryptPayload(data, nonce, "", dappPrivateKey);
+
+      if (!decryptedForConnect) {
+        toast.error('Ошибка расшифровки данных Phantom');
+        clearPhantomStorage();
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+
+      console.log('Decrypted payload for connect:', decryptedForConnect);
+
+      if (decryptedForConnect.public_key) {
+        const userPublicKey = decryptedForConnect.public_key;
+        // Сохраняем публичный ключ Phantom в localStorage и в state
+        localStorage.setItem('phantom_user_public_key', userPublicKey);
+        setPhantomPublicKey(userPublicKey);
+      }
+
+      // Теперь используем сохранённый phantomPublicKey для дальнейшей расшифровки
       const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
 
-      console.log('Keys for decryption:', {
-        dappPrivateKey: dappPrivateKey.slice(0, 10) + '...',
-        phantomPublicKeyInStorage: phantomPublicKeyInStorage.slice(0, 10) + '...',
-      });
-
+      // Если нет ключа — ошибаемся
       if (!phantomPublicKeyInStorage) {
         console.error('Phantom public key missing in localStorage');
         toast.error('Ошибка: не найден публичный ключ Phantom');
@@ -166,31 +185,23 @@ export function usePhantom() {
 
       const pendingAction = localStorage.getItem('phantom_pending_action');
 
-      // Здесь можно добавить callback или обработку завершения платежа/регистрации.
-
       if (pendingAction === 'connect') {
-        if (decrypted.public_key) {
-          const userPublicKey = decrypted.public_key;
-          localStorage.setItem('phantom_user_public_key', userPublicKey);
-          setPhantomPublicKey(userPublicKey);
-          toast.success('Подключено к Phantom Wallet!');
-          localStorage.removeItem('phantom_pending_action');
+        toast.success('Подключено к Phantom Wallet!');
+        localStorage.removeItem('phantom_pending_action');
 
-          const delayedAction = localStorage.getItem('phantom_delayed_action');
-          if (delayedAction) {
-            localStorage.removeItem('phantom_delayed_action');
-            setTimeout(() => {
-              if (delayedAction === 'registration' || delayedAction === 'subscription') {
-                handlePhantomPayment();
-              }
-            }, 1000);
-          }
+        const delayedAction = localStorage.getItem('phantom_delayed_action');
+        if (delayedAction) {
+          localStorage.removeItem('phantom_delayed_action');
+          setTimeout(() => {
+            if (delayedAction === 'registration' || delayedAction === 'subscription') {
+              handlePhantomPayment();
+            }
+          }, 1000);
         }
-        return;
       }
 
-      // Логика по обработке транзакции, регистрации, подписки и т.п.
-      // Пока просто очищаем
+      // Обработка других pendingAction (transaction, registration, subscription)...
+
       clearPhantomStorage();
       window.history.replaceState({}, '', window.location.pathname);
     } catch (error) {
@@ -201,7 +212,6 @@ export function usePhantom() {
     }
   }
 
-  // Запуск платежа с поддержкой мобильного и десктопных Phantom
   async function handlePhantomPayment(): Promise<string | null> {
     if (isMobile()) {
       if (!phantomPublicKey) {
@@ -306,7 +316,6 @@ export function usePhantom() {
     }
   }
 
-  // Сброс запросов
   function abortRequests() {
     abortControllerRef.current?.abort();
   }
