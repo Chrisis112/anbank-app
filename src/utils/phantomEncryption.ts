@@ -12,44 +12,41 @@ export const generateRandomNonce = (): string => {
 };
 
 // Шифрование payload (объект) с использованием публичного ключа Phantom dApp
-// dappEncryptionPublicKeyBase58 и phantomPublicKeyBase58 - base58 строки ключей
-// dappPrivateKeyUint8Array - секретный приватный ключ dApp Uint8Array (32 байта)
+// dappEncryptionPublicKey и phantomPublicKey - base58 строки ключей
+// dappPrivateKeyUintArray - приватный ключ Uint8Array
 export const encryptPayload = (
   payload: any,
   nonceBase58: string,
-  dappEncryptionPublicKeyBase58: string,
-  phantomPublicKeyBase58: string,
-  dappPrivateKeyUint8Array: Uint8Array
+  dappEncryptionPublicKey: string,
+  phantomPublicKey: string,
+  dappPrivateKeyUintArray: Uint8Array
 ): string => {
   const nonce = bs58.decode(nonceBase58);
-  const phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
-
+  const dappPublicKey = bs58.decode(dappEncryptionPublicKey);
+  const phantomPublicKeyBytes = bs58.decode(phantomPublicKey);
+  // Кодируем строку payload в Uint8Array
   const message = encodeUTF8(JSON.stringify(payload));
-
-  // Шифрование с использованием libsodium "box"
-  const encrypted = nacl.box(message, nonce, phantomPublicKey, dappPrivateKeyUint8Array);
-
+  // Шифруем payload
+  const encrypted = nacl.box(message, nonce, phantomPublicKeyBytes, dappPrivateKeyUintArray);
   return bs58.encode(encrypted);
 };
 
-// Расшифровка payload (для примера, если понадобится)
+// Расшифровка payload
 export const decryptPayload = (
   encryptedBase58: string,
   nonceBase58: string,
-  phantomPublicKeyBase58: string,
-  dappPrivateKeyBase58: string
+  phantomPublicKey: string,
+  dappPrivateKey: string
 ): any | null => {
-  const encrypted = bs58.decode(encryptedBase58);               // Uint8Array
-  const nonce = bs58.decode(nonceBase58);                       // Uint8Array
-  const phantomPublicKey = bs58.decode(phantomPublicKeyBase58); // Uint8Array
-  const dappPrivateKey = bs58.decode(dappPrivateKeyBase58);     // Uint8Array
-
-  const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKey, dappPrivateKey);
+  const encrypted = bs58.decode(encryptedBase58);
+  const nonce = bs58.decode(nonceBase58);
+  const phantomPublicKeyBytes = bs58.decode(phantomPublicKey);
+  const dappPrivateKeyBytes = bs58.decode(dappPrivateKey);
+  const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKeyBytes, dappPrivateKeyBytes);
   if (!decrypted) return null;
-
-  const decodedStr = new TextDecoder().decode(decrypted);
+  const decoded = decodeUTF8(decrypted);
   try {
-    return JSON.parse(decodedStr);
+    return JSON.parse(decoded);
   } catch {
     return null;
   }
