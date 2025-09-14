@@ -15,7 +15,7 @@ import {
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { generateRandomNonce, encryptPayload } from '@/utils/phantomEncryption'; // Нужно создать эти утилиты
+import { generateRandomNonce, encryptPayload, decryptPayload } from '@/utils/phantomEncryption'; // Нужно создать эти утилиты
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -88,20 +88,47 @@ export default function RegistrationForm() {
   };
 
   // Обработка callback от Phantom
-  const handlePhantomCallback = async (nonce: string, encryptedData: string) => {
-    try {
-      // Здесь нужно расшифровать данные и обработать результат
-      // Для простоты пока просто логируем
-      console.log('Phantom callback received:', { nonce, encryptedData });
-      toast.success('Транзакция подписана в Phantom!');
-      
-      // TODO: Расшифровать данные, получить подпись и завершить регистрацию/оплату
-    } catch (error) {
-      console.error('Error handling Phantom callback:', error);
-      toast.error('Ошибка обработки ответа от Phantom');
+const handlePhantomCallback = async (nonce: string, encryptedData: string) => {
+  try {
+    // Расшифруйте payload, получите подпись:
+    const result = decryptPayload(
+      encryptedData,
+      nonce,
+      localStorage.getItem('phantom_dapp_public_key')!,
+      localStorage.getItem('phantom_dapp_private_key')!
+    );
+    if (!result || !result.signature) {
+      toast.error('Ошибка расшифровки данных Phantom');
+      return;
     }
-  };
 
+    toast.success('Транзакция успешно подписана в Phantom!');
+
+    // После успешной оплаты вызовите регистрацию или продление подписки с signature:
+    const paymentSignature = result.signature;
+
+    // пример: вызов backend с paymentSignature
+    const solanaPublicKey = result.publicKey || phantomPublicKey; // полученный publicKey из callback
+
+    const registerResult = await register(
+      nickname,
+      email,
+      password,
+      role,
+      solanaPublicKey,
+      paymentSignature,
+      promoCode
+    );
+
+    if (registerResult.success) {
+      router.push('/chat');
+    } else {
+      toast.error(registerResult.error || 'Registration failed');
+    }
+  } catch (e) {
+    toast.error('Ошибка обработки ответа от Phantom');
+  }
+};
   // Исправленная функция handlePhantomPayment
   const handlePhantomPayment = async (): Promise<string | null> => {
     const provider = (window as any).solana;
@@ -334,11 +361,12 @@ const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey,
 
       const paymentSignature = await handlePhantomPayment();
       
-      if (isMobile()) {
-        setLoading(false);
-        toast.info("После завершения оплаты в Phantom вернитесь для завершения регистрации.");
-        return;
-      }
+    if (isMobile()) {
+  setLoading(false);
+  toast.info("Оплата выполняется в приложении Phantom. После завершения оплаты вернитесь сюда для продолжения.");
+  // НЕТ return с ошибкой, а просто прерываем дальнейший код
+  return;
+}
       
       if (!paymentSignature) {
         toast.error('Payment failed');

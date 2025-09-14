@@ -37,17 +37,17 @@ export const decryptPayload = (
   encryptedBase58: string,
   nonceBase58: string,
   phantomPublicKeyBase58: string,
-  dappPrivateKeyUint8Array: Uint8Array
+  dappPrivateKeyBase58: string
 ): any | null => {
-  const encrypted = bs58.decode(encryptedBase58);
-  const nonce = bs58.decode(nonceBase58);
-  const phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
+  const encrypted = bs58.decode(encryptedBase58);               // Uint8Array
+  const nonce = bs58.decode(nonceBase58);                       // Uint8Array
+  const phantomPublicKey = bs58.decode(phantomPublicKeyBase58); // Uint8Array
+  const dappPrivateKey = bs58.decode(dappPrivateKeyBase58);     // Uint8Array
 
-  const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKey, dappPrivateKeyUint8Array);
-  if (!decrypted) {
-    return null; // Ошибка расшифровки
-  }
-  const decodedStr = decodeUTF8(decrypted);
+  const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKey, dappPrivateKey);
+  if (!decrypted) return null;
+
+  const decodedStr = new TextDecoder().decode(decrypted);
   try {
     return JSON.parse(decodedStr);
   } catch {
