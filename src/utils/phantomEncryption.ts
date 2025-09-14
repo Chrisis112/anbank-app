@@ -35,18 +35,20 @@ export const encryptPayload = (
 export const decryptPayload = (
   encryptedBase58: string,
   nonceBase58: string,
-  phantomPublicKey: string,
-  dappPrivateKey: string
+  phantomPublicKeyBase58: string,
+  dappPrivateKeyBase58: string
 ): any | null => {
-  const encrypted = bs58.decode(encryptedBase58);
-  const nonce = bs58.decode(nonceBase58);
-  const phantomPublicKeyBytes = bs58.decode(phantomPublicKey);
-  const dappPrivateKeyBytes = bs58.decode(dappPrivateKey);
-  const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKeyBytes, dappPrivateKeyBytes);
-  if (!decrypted) return null;
-  const decoded = decodeUTF8(decrypted);
   try {
-    return JSON.parse(decoded);
+    const encrypted = bs58.decode(encryptedBase58);
+    const nonce = bs58.decode(nonceBase58);
+    const phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
+    const dappPrivateKey = bs58.decode(dappPrivateKeyBase58);
+
+    const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKey, dappPrivateKey);
+    if (!decrypted) return null;
+
+    const jsonStr = decodeUTF8(decrypted);
+    return JSON.parse(jsonStr);
   } catch {
     return null;
   }

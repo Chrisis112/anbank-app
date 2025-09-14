@@ -81,50 +81,42 @@ export default function RegistrationForm() {
     return { publicKey, privateKey };
   };
 
-  useEffect(() => {
-    // Восстановление состояния Phantom из localStorage
-    const savedPublicKey = localStorage.getItem('phantom_user_public_key');
-    if (savedPublicKey) {
-      setPhantomPublicKey(savedPublicKey);
+useEffect(() => {
+  async function process() {
+    const params = new URLSearchParams(window.location.search);
+    const encodedNonce = params.get('nonce');
+    const encodedData = params.get('data');
+    const errorCode = params.get('errorCode');
+    const errorMessage = params.get('errorMessage');
+
+    if (errorCode) {
+      toast.error(`Phantom error: ${errorMessage || errorCode}`);
+      clearPhantomStorageAndUrl();
+      return;
     }
 
-    async function processPhantomCallback() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const nonce = urlParams.get("nonce");
-      const data = urlParams.get("data");
-      const errorCode = urlParams.get("errorCode");
-      const errorMessage = urlParams.get("errorMessage");
-
-      if (errorCode) {
-        console.error("Phantom error:", errorCode, errorMessage);
-        toast.error(`Phantom error: ${errorMessage || errorCode}`);
-        // Очистить localStorage и url
-        localStorage.removeItem("phantom_pending_action");
-        localStorage.removeItem("phantom_registration_data");
-        localStorage.removeItem("phantom_subscription_data");
-        window.history.replaceState({}, document.title, window.location.pathname);
-        return;
-      }
-
-      if (nonce && data) {
-        try {
-          console.log("Phantom callback params:", { nonce, data });
-          await handlePhantomCallback(nonce, data);
-        } catch (e) {
-          console.error("Error in Phantom callback:", e);
-          toast.error("Ошибка обработки ответа от Phantom");
-        }
-        // Очистка url только после обработки
-        window.history.replaceState({}, document.title, window.location.pathname);
+    if (encodedNonce && encodedData) {
+      try {
+        const nonce = decodeURIComponent(encodedNonce);
+        const data = decodeURIComponent(encodedData);
+        await handlePhantomCallback(nonce, data);
+      } catch (e) {
+        toast.error("Ошибка обработки ответа Phantom");
+      } finally {
+        clearPhantomStorageAndUrl();
       }
     }
+  }
+  process();
+}, []);
 
-    processPhantomCallback();
-
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
+function clearPhantomStorageAndUrl() {
+  localStorage.removeItem('phantomPrivateKey');
+  localStorage.removeItem('phantomPublicKey');
+  localStorage.removeItem('phantom_session');
+  localStorage.removeItem('phantomPendingAction');
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
 
   // Функция определения мобильного устройства
   const isMobile = () => {
@@ -133,6 +125,13 @@ export default function RegistrationForm() {
 
   // Обработка callback от Phantom
   const handlePhantomCallback = async (nonce: string, encryptedData: string) => {
+      const dappPrivateKey = localStorage.getItem('phantomPrivateKey')!;
+  const phantomPublicKey = localStorage.getItem('phantomPublicKey')!;
+  const decrypted = decryptPayload(encryptedData, nonce, phantomPublicKey, dappPrivateKey);
+  if (!decrypted) {
+    toast.error('Ошибка расшифровки данных Phantom');
+    return;
+  }
     try {
       const { publicKey: dappPublicKey, privateKey: dappPrivateKey } = getDappKeys();
       
