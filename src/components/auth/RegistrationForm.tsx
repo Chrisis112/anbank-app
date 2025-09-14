@@ -46,7 +46,16 @@ export default function RegistrationForm() {
 
   // Phantom session storage
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
-
+const [dappKeys, setDappKeys] = useState<{ publicKey: string; privateKey: string }>(() => {
+  // Логика инициализации, например получение из localStorage или генерация новых ключей
+  const pub = localStorage.getItem('phantom_dapp_public_key');
+  const priv = localStorage.getItem('phantom_dapp_private_key');
+  if (pub && priv) {
+    return { publicKey: pub, privateKey: priv };
+  }
+  // Иначе верните пустые строки или сгенерируйте новые ключи
+  return { publicKey: '', privateKey: '' };
+});
   // Abort controller for login request cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -82,41 +91,126 @@ export default function RegistrationForm() {
   };
 
 useEffect(() => {
-  async function process() {
+  async function processCallback() {
     const params = new URLSearchParams(window.location.search);
-    const encodedNonce = params.get('nonce');
-    const encodedData = params.get('data');
+    // URL кодированные параметры decrypt
+    const nonceParam = params.get('nonce');
+    const dataParam = params.get('data');
     const errorCode = params.get('errorCode');
     const errorMessage = params.get('errorMessage');
 
     if (errorCode) {
       toast.error(`Phantom error: ${errorMessage || errorCode}`);
-      clearPhantomStorageAndUrl();
+      clearPhantomStorage();
+      window.history.replaceState({}, '', window.location.pathname);
       return;
     }
 
-    if (encodedNonce && encodedData) {
+    if (nonceParam && dataParam) {
       try {
-        const nonce = decodeURIComponent(encodedNonce);
-        const data = decodeURIComponent(encodedData);
-        await handlePhantomCallback(nonce, data);
+        const nonce = decodeURIComponent(nonceParam);
+        const data = decodeURIComponent(dataParam);
+
+        // Обратитесь к локальному хранилищу для ключей
+        const dappPublicKey = localStorage.getItem('phantom_dapp_public_key') || '';
+        const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
+        const phantomPublicKey = localStorage.getItem('phantom_user_public_key') || '';
+
+        // Расшифровка
+        const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
+
+        if (!decrypted) {
+          toast.error('Ошибка расшифровки данных Phantom');
+          clearPhantomStorage();
+          window.history.replaceState({}, '', window.location.pathname);
+          return;
+        }
+
+        toast.success('Оплата подтверждена! Завершаем регистрацию/подписку');
+
+        const paymentSignature = decrypted.signature;
+        const solanaPublicKey = decrypted.public_key || phantomPublicKey;
+
+        // В зависимости от сохранённого действия вызываем backend
+        const pendingAction = localStorage.getItem('phantom_pending_action');
+
+        if (pendingAction === 'registration') {
+          const registrationData = JSON.parse(localStorage.getItem('phantom_registration_data') || '{}');
+
+          // Вызов backend регистрации
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nickname: registrationData.nickname,
+              email: registrationData.email,
+              password: registrationData.password,
+              role: registrationData.role,
+              solanaPublicKey,
+              paymentSignature,
+              promoCode: registrationData.promoCode || null,
+            }),
+          });
+          const json = await res.json();
+
+          if (res.ok) {
+            localStorage.setItem('token', json.token);
+            setUser(json.user);
+            router.push('/chat');
+          } else {
+            toast.error(json.error || 'Ошибка регистрации');
+          }
+        } else if (pendingAction === 'subscription') {
+          const subscriptionData = JSON.parse(localStorage.getItem('phantom_subscription_data') || '{}');
+
+          // Вызов backend продления подписки
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              txSignature: paymentSignature,
+              solanaPublicKey,
+              email: subscriptionData.email,
+            }),
+          });
+          const json = await res.json();
+
+          if (res.ok) {
+            localStorage.setItem('token', json.token);
+            setUser(json.user);
+            setIsSubscriptionModalOpen(false);
+            router.push('/chat');
+            toast.success('Подписка успешно продлена');
+          } else {
+            toast.error(json.error || 'Ошибка продления подписки');
+          }
+        }
+
+        clearPhantomStorage();
+        window.history.replaceState({}, '', window.location.pathname);
       } catch (e) {
-        toast.error("Ошибка обработки ответа Phantom");
-      } finally {
-        clearPhantomStorageAndUrl();
+        console.error('Ошибка обработки callback Phantom:', e);
+        toast.error('Ошибка обработки ответа от Phantom');
+        clearPhantomStorage();
+        window.history.replaceState({}, '', window.location.pathname);
       }
     }
   }
-  process();
+  processCallback();
+
+  return () => abortControllerRef.current?.abort();
 }, []);
 
-function clearPhantomStorageAndUrl() {
-  localStorage.removeItem('phantomPrivateKey');
-  localStorage.removeItem('phantomPublicKey');
-  localStorage.removeItem('phantom_session');
-  localStorage.removeItem('phantomPendingAction');
-  window.history.replaceState({}, document.title, window.location.pathname);
+// Утилита очистки localStorage
+function clearPhantomStorage() {
+  localStorage.removeItem('phantom_pending_action');
+  localStorage.removeItem('phantom_registration_data');
+  localStorage.removeItem('phantom_subscription_data');
+  localStorage.removeItem('phantom_user_public_key');
+  localStorage.removeItem('phantom_dapp_public_key');
+  localStorage.removeItem('phantom_dapp_private_key');
 }
+
 
   // Функция определения мобильного устройства
   const isMobile = () => {
@@ -260,93 +354,81 @@ function clearPhantomStorageAndUrl() {
   };
 
   // Функция handlePhantomPayment
-  const handlePhantomPayment = async (): Promise<string | null> => {
-    const provider = (window as any).solana;
-
-    // Десктоп: расширение Phantom
-    if (provider && provider.isPhantom && !isMobile()) {
+    const handlePhantomPayment = async (): Promise<string | null> => {
+    if (typeof (window as any).solana !== 'undefined' && (window as any).solana.isPhantom && !isMobile()) {
+      // Десктопный flow с расширением Phantom
       try {
+        const provider = (window as any).solana;
         await provider.connect();
-
-        const connection = new Connection(SOLANA_NETWORK);
         const fromPubkey = provider.publicKey;
         const toPubkey = new PublicKey(RECEIVER_WALLET);
         const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
 
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-        );
+        const connection = new Connection(SOLANA_NETWORK);
+        const transaction = new Transaction().add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
+
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = fromPubkey;
 
         const signed = await provider.signTransaction(transaction);
         const signature = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(signature, 'confirmed');
+        await connection.confirmTransaction(signature);
 
-        toast.success('✅ Payment successful!');
+        toast.success('✅ Оплата успешна!');
         return signature;
-      } catch (err) {
-        console.error('Desktop payment error:', err);
-        toast.error('Payment failed');
+      } catch (e) {
+        toast.error('Ошибка оплаты');
         return null;
       }
     }
 
-    // Мобильные устройства
     if (isMobile()) {
+      // Мобильный flow через deeplink Phantom
       if (!phantomPublicKey) {
-        // Сначала нужно подключиться
+        // Нужно подключиться к Phantom (через deeplink connect)
         await connectPhantomMobile();
-        return null;
+        return null; // Остановить выполнение и ждать callback
       }
 
       try {
-        const connection = new Connection(SOLANA_NETWORK);
         const fromPubkey = new PublicKey(phantomPublicKey);
         const toPubkey = new PublicKey(RECEIVER_WALLET);
         const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
 
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-        );
+        const connection = new Connection(SOLANA_NETWORK);
+
+        const transaction = new Transaction().add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
+
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = fromPubkey;
 
-        const serializedTransaction = transaction.serializeMessage();
-        const base58Transaction = bs58.encode(serializedTransaction);
-
-        const currentUrl = window.location.origin + window.location.pathname;
-        const redirectLink = encodeURIComponent(currentUrl);
-        
-        const { publicKey: dappPublicKey, privateKey: dappPrivateKey } = getDappKeys();
+        // Сериализуем и кодируем
+        const serializedMsg = transaction.serializeMessage();
+        const base58Tx = bs58.encode(serializedMsg);
 
         const nonce = generateRandomNonce();
-        const payload = {
-          transaction: base58Transaction
-        };
+
+        const payload = { transaction: base58Tx };
 
         const encryptedPayload = encryptPayload(
-          payload, 
-          nonce, 
-          dappPublicKey, 
-          phantomPublicKey, 
-          bs58.decode(dappPrivateKey)
+          payload,
+          nonce,
+          dappKeys.publicKey,
+          phantomPublicKey,
+          bs58.decode(dappKeys.privateKey)
         );
 
-        localStorage.setItem('phantom_pending_action', 'transaction');
+        const redirectLink = encodeURIComponent(window.location.origin + window.location.pathname);
 
-        const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappPublicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
+        const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappKeys.publicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
 
-        console.log('Opening Phantom deeplink:', deepLink);
-        toast.info('Открываем Phantom для подписания транзакции...');
+        toast.info('Перенаправляем в Phantom для подписи транзакции...');
         window.location.href = deepLink;
 
-        return null;
-
+        return null; // ждем callback для продолжения
       } catch (e) {
-        console.error('Mobile payment error:', e);
         toast.error('Ошибка создания транзакции');
         return null;
       }
@@ -358,24 +440,16 @@ function clearPhantomStorageAndUrl() {
 
   // Подключение к Phantom на мобильном
   const connectPhantomMobile = async () => {
-    if (!isMobile()) return;
-
     try {
-      const currentUrl = window.location.origin + window.location.pathname;
-      const appUrl = encodeURIComponent(currentUrl);
-      const redirectLink = encodeURIComponent(currentUrl);
-      
-      const { publicKey: dappPublicKey } = getDappKeys();
-      
+      const url = window.location.origin + window.location.pathname;
+      const redirectUrl = encodeURIComponent(url);
+
+      const deepLink = `https://phantom.app/ul/v1/connect?app_url=${encodeURIComponent(url)}&dapp_encryption_public_key=${dappKeys.publicKey}&redirect_link=${redirectUrl}&cluster=mainnet-beta`;
       localStorage.setItem('phantom_pending_action', 'connect');
 
-      const deepLink = `https://phantom.app/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappPublicKey}&redirect_link=${redirectLink}&cluster=mainnet-beta`;
-      
-      console.log('Opening Phantom connect deeplink:', deepLink);
-      toast.info("Подключаемся к Phantom...");
+      toast.info('Подключаемся к Phantom...');
       window.location.href = deepLink;
-    } catch (error) {
-      console.error('Error connecting to Phantom mobile:', error);
+    } catch (e) {
       toast.error('Ошибка подключения к Phantom');
     }
   };

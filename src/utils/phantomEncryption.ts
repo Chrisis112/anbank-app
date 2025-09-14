@@ -1,37 +1,38 @@
 import bs58 from 'bs58';
 import nacl from 'tweetnacl';
 
-// Встроенный utf8 кодировщик и декодировщик (замена tweetnacl-util)
-const encodeUTF8 = (str: string): Uint8Array => new TextEncoder().encode(str);
-const decodeUTF8 = (buf: Uint8Array): string => new TextDecoder().decode(buf);
+const encodeUTF8 = (str: string) => new TextEncoder().encode(str);
+const decodeUTF8 = (buf: Uint8Array) => new TextDecoder().decode(buf);
 
-// Генерация случайного nonce (24 байта) в base58
 export const generateRandomNonce = (): string => {
-  const nonce = nacl.randomBytes(24);
-  return bs58.encode(nonce);
+  return bs58.encode(nacl.randomBytes(24));
 };
 
-// Шифрование payload (объект) с использованием публичного ключа Phantom dApp
-// dappEncryptionPublicKey и phantomPublicKey - base58 строки ключей
-// dappPrivateKeyUintArray - приватный ключ Uint8Array
+// Генерация пары ключей dApp для шифрования
+export const generateDappKeypair = () => {
+  const keypair = nacl.box.keyPair();
+  return {
+    publicKey: bs58.encode(keypair.publicKey),
+    privateKey: bs58.encode(keypair.secretKey),
+  };
+};
+
 export const encryptPayload = (
   payload: any,
   nonceBase58: string,
-  dappEncryptionPublicKey: string,
-  phantomPublicKey: string,
-  dappPrivateKeyUintArray: Uint8Array
+  dappEncryptionPublicKeyBase58: string,
+  phantomPublicKeyBase58: string,
+  dappPrivateKeyUint8Array: Uint8Array
 ): string => {
   const nonce = bs58.decode(nonceBase58);
-  const dappPublicKey = bs58.decode(dappEncryptionPublicKey);
-  const phantomPublicKeyBytes = bs58.decode(phantomPublicKey);
-  // Кодируем строку payload в Uint8Array
+  const phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
   const message = encodeUTF8(JSON.stringify(payload));
-  // Шифруем payload
-  const encrypted = nacl.box(message, nonce, phantomPublicKeyBytes, dappPrivateKeyUintArray);
+
+  const encrypted = nacl.box(message, nonce, phantomPublicKey, dappPrivateKeyUint8Array);
+
   return bs58.encode(encrypted);
 };
 
-// Расшифровка payload
 export const decryptPayload = (
   encryptedBase58: string,
   nonceBase58: string,
