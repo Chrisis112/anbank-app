@@ -46,16 +46,7 @@ export default function RegistrationForm() {
 
   // Phantom session storage
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
-  const [dappKeys, setDappKeys] = useState<{ publicKey: string; privateKey: string }>(() => {
-    // Инициализация dApp ключей из localStorage или генерация
-    const pub = localStorage.getItem('phantom_dapp_public_key');
-    const priv = localStorage.getItem('phantom_dapp_private_key');
-    if (pub && priv) return { publicKey: pub, privateKey: priv };
-    const keys = generateDappKeypair();
-    localStorage.setItem('phantom_dapp_public_key', keys.publicKey);
-    localStorage.setItem('phantom_dapp_private_key', keys.privateKey);
-    return keys;
-  });
+const [dappKeys, setDappKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   // Abort controller for login request cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -89,6 +80,21 @@ export default function RegistrationForm() {
     
     return { publicKey, privateKey };
   };
+
+  useEffect(() => {
+  if (typeof window === 'undefined') return; // защита от SSR
+  
+  let pub = localStorage.getItem('phantom_dapp_public_key');
+  let priv = localStorage.getItem('phantom_dapp_private_key');
+  
+  if (!pub || !priv) {
+    // создаём новые ключи если отсутствуют
+    const newKeys = generateDappKeys();
+    pub = newKeys.publicKey;
+priv = newKeys.secretKey;
+  }
+  setDappKeys({ publicKey: pub, privateKey: priv });
+}, []);
 
 useEffect(() => {
   async function processCallback() {
@@ -411,7 +417,10 @@ function clearPhantomStorage() {
         const nonce = generateRandomNonce();
 
         const payload = { transaction: base58Tx };
-
+if (!dappKeys) {
+  toast.error('Ключи dApp не инициализированы');
+  return null;
+}
         const encryptedPayload = encryptPayload(
           payload,
           nonce,
@@ -443,7 +452,10 @@ function clearPhantomStorage() {
     try {
       const url = window.location.origin + window.location.pathname;
       const redirectUrl = encodeURIComponent(url);
-
+if (!dappKeys) {
+  toast.error('Ключи dApp не инициализированы');
+  return;
+}
       const deepLink = `https://phantom.app/ul/v1/connect?app_url=${encodeURIComponent(url)}&dapp_encryption_public_key=${dappKeys.publicKey}&redirect_link=${redirectUrl}&cluster=mainnet-beta`;
       localStorage.setItem('phantom_pending_action', 'connect');
 
