@@ -55,35 +55,48 @@ export default function RegistrationForm() {
   const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
   const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.01');
 
-  useEffect(() => {
-    // Проверяем URL на наличие callback параметров от Phantom
+useEffect(() => {
+  async function processPhantomCallback() {
     const urlParams = new URLSearchParams(window.location.search);
-    const nonce = urlParams.get('nonce');
-    const data = urlParams.get('data');
-    const errorCode = urlParams.get('errorCode');
-    const errorMessage = urlParams.get('errorMessage');
+    const nonce = urlParams.get("nonce");
+    const data = urlParams.get("data");
+    const errorCode = urlParams.get("errorCode");
+    const errorMessage = urlParams.get("errorMessage");
 
     if (errorCode) {
       toast.error(`Phantom error: ${errorMessage || errorCode}`);
-      // Очистить URL и localStorage
-      localStorage.removeItem('phantom_pending_action');
-      localStorage.removeItem('phantom_registration_data');
-      localStorage.removeItem('phantom_subscription_data');
+      // Очистить localStorage и url
+      localStorage.removeItem("phantom_pending_action");
+      localStorage.removeItem("phantom_registration_data");
+      localStorage.removeItem("phantom_subscription_data");
       window.history.replaceState({}, document.title, window.location.pathname);
       return;
     }
 
     if (nonce && data) {
-      // Обработать успешный ответ от Phantom
-      handlePhantomCallback(nonce, data);
-      // Очистить URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+      try {
+        console.log("Phantom callback params:", { nonce, data });
+        await handlePhantomCallback(nonce, data);
+      } catch (e) {
+        console.error("Error in Phantom callback:", e);
+        toast.error("Ошибка обработки ответа от Phantom");
+      } finally {
+        // Очистка url и localStorage только после попытки обработки
+        localStorage.removeItem("phantom_pending_action");
+        localStorage.removeItem("phantom_registration_data");
+        localStorage.removeItem("phantom_subscription_data");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     }
+  }
 
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
+  processPhantomCallback();
+
+  return () => {
+    abortControllerRef.current?.abort();
+  };
+}, []);
+
 
   // Функция определения мобильного устройства
   const isMobile = () => {
