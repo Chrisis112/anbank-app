@@ -274,7 +274,7 @@ export default function RegistrationForm() {
 
   // Обрабатываем Phantom callback при монтировании
   useEffect(() => {
-    phantom.processCallbackFromUrl();
+    phantom.processCallbackUrl();
   }, []);
 
   return (

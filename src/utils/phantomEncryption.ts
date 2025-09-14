@@ -1,12 +1,13 @@
-import bs58 from 'bs58';
-import nacl from 'tweetnacl';
+// phantomEncryption.ts
+
+import bs58 from "bs58";
+import nacl from "tweetnacl";
 
 const encodeUTF8 = (str: string) => new TextEncoder().encode(str);
 const decodeUTF8 = (buf: Uint8Array) => new TextDecoder().decode(buf);
 
-export const generateRandomNonce = (): string => {
-  return bs58.encode(nacl.randomBytes(24));
-};
+export const generateRandomNonce = (): string =>
+  bs58.encode(nacl.randomBytes(24));
 
 export const generateDappKeypair = () => {
   const keypair = nacl.box.keyPair();
@@ -28,7 +29,6 @@ export const encryptPayload = (
   const message = encodeUTF8(JSON.stringify(payload));
 
   const encrypted = nacl.box(message, nonce, phantomPubKey, dappPrivateKeyUint8Array);
-
   return bs58.encode(encrypted);
 };
 
@@ -40,46 +40,43 @@ export const decryptPayload = (
 ): any | null => {
   try {
     if (!encryptedBase58 || !nonceBase58 || !dappPrivateKey) {
-      throw new Error('Missing required decryption inputs');
+      throw new Error("Missing required inputs for decryption");
     }
 
     const encrypted = bs58.decode(encryptedBase58);
     const nonce = bs58.decode(nonceBase58);
-    const dappPrivKeyDecoded = bs58.decode(dappPrivateKey);
-    if (dappPrivKeyDecoded.length !== 32) {
-      throw new Error(`Invalid dApp private key length: ${dappPrivKeyDecoded.length}`);
+    const dappPrivKey = bs58.decode(dappPrivateKey);
+    if (dappPrivKey.length !== 32) {
+      throw new Error(`Invalid dApp private key length: ${dappPrivKey.length}`);
     }
 
-    let phantomPubKeyDecoded: Uint8Array;
-
+    let phantomPubKey: Uint8Array;
     if (phantomPublicKey) {
-      phantomPubKeyDecoded = bs58.decode(phantomPublicKey);
-      if (phantomPubKeyDecoded.length !== 32) {
-        throw new Error(`Invalid Phantom public key length: ${phantomPubKeyDecoded.length}`);
+      phantomPubKey = bs58.decode(phantomPublicKey);
+      if (phantomPubKey.length !== 32) {
+        throw new Error(`Invalid Phantom public key length: ${phantomPubKey.length}`);
       }
     } else {
-      // При отсутствии Phantom public key используем DApp публичный ключ
-      const dappPubKey = localStorage.getItem('phantom_dapp_public_key');
+      const dappPubKey = localStorage.getItem("phantom_dapp_public_key");
       if (!dappPubKey) {
-        throw new Error('DApp public key missing in localStorage');
+        throw new Error("Missing dApp public key in localStorage");
       }
-      phantomPubKeyDecoded = bs58.decode(dappPubKey);
-      if (phantomPubKeyDecoded.length !== 32) {
-        throw new Error(`Invalid DApp public key length: ${phantomPubKeyDecoded.length}`);
+      phantomPubKey = bs58.decode(dappPubKey);
+      if (phantomPubKey.length !== 32) {
+        throw new Error(`Invalid dApp public key length: ${phantomPubKey.length}`);
       }
     }
 
-    const decrypted = nacl.box.open(encrypted, nonce, phantomPubKeyDecoded, dappPrivKeyDecoded);
-
+    const decrypted = nacl.box.open(encrypted, nonce, phantomPubKey, dappPrivKey);
     if (!decrypted) {
-      console.error('Failed to decrypt: nacl.box.open returned null');
+      console.error("nacl.box.open returned null");
       return null;
     }
 
     const decoded = decodeUTF8(decrypted);
     return JSON.parse(decoded);
-  } catch (error) {
-    console.error('Decryption error:', error);
+  } catch (e) {
+    console.error("Decryption error:", e);
     return null;
   }
 };
