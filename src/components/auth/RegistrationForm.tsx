@@ -178,105 +178,93 @@ export default function RegistrationForm() {
   };
 
   // Исправленная функция handlePhantomPayment
-  const handlePhantomPayment = async (): Promise<string | null> => {
-    const provider = (window as any).solana;
-    
-    // Десктоп: расширение Phantom
-    if (provider && provider.isPhantom && !isMobile()) {
-      try {
-        await provider.connect();
-        const connection = new Connection(SOLANA_NETWORK);
-        const fromPubkey = provider.publicKey;
-        const toPubkey = new PublicKey(RECEIVER_WALLET);
-        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+const handlePhantomPayment = async (): Promise<string | null> => {
+  const provider = (window as any).solana;
 
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-        );
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPubkey;
+  if (provider && provider.isPhantom && !isMobile()) {
+    try {
+      await provider.connect();
 
-        const signed = await provider.signTransaction(transaction);
-        const signature = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(signature, 'confirmed');
+      const connection = new Connection(SOLANA_NETWORK);
+      const fromPubkey = provider.publicKey;
+      const toPubkey = new PublicKey(RECEIVER_WALLET);
+      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
 
-        toast.success('✅ Payment successful!');
-        return signature;
-      } catch (err) {
-        toast.error('Payment failed');
-        return null;
-      }
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+      );
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = fromPubkey;
+
+      const signed = await provider.signTransaction(transaction);
+      const signature = await connection.sendRawTransaction(signed.serialize());
+      await connection.confirmTransaction(signature);
+
+      toast.success('✅ Payment successful!');
+      return signature;
+    } catch (err) {
+      toast.error('Payment failed');
+      return null;
     }
-    
-    // Мобильные устройства: deeplink для транзакции
-    if (isMobile()) {
-      if (!phantomSession || !phantomPublicKey) {
-        // Сначала нужно подключиться
-        await connectPhantomMobile();
-        return null;
-      }
+  }
 
-      try {
-        // Создаем транзакцию
-        const connection = new Connection(SOLANA_NETWORK);
-        const fromPubkey = new PublicKey(phantomPublicKey);
-        const toPubkey = new PublicKey(RECEIVER_WALLET);
-        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
-
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-        );
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPubkey;
-
-        // Сериализуем транзакцию
-        const serializedTransaction = transaction.serializeMessage();
-        const base58Transaction = bs58.encode(serializedTransaction);
-
-        // Создаем deeplink для подписания транзакции
-        const currentUrl = window.location.origin + window.location.pathname;
-        const redirectLink = encodeURIComponent(currentUrl);
-        
-        // Здесь нужны ваши ключи шифрования (сохраненные при подключении)
-        const dappEncryptionPublicKey = localStorage.getItem('phantom_dapp_public_key');
-        if (!dappEncryptionPublicKey) {
-          toast.error('Нет ключей шифрования. Переподключитесь к Phantom.');
-          return null;
-        }
-
-        const nonce = generateRandomNonce();
-        const payload = {
-          transaction: base58Transaction,
-          session: phantomSession
-        };
-
-        const dappPrivateKeyBase58 = localStorage.getItem('phantom_dapp_private_key');
-        if (!dappPrivateKeyBase58) {
-          toast.error('Нет приватного ключа dApp для шифрования.');
-          return null;
-        }
-        const dappPrivateKeyUint8Array = bs58.decode(dappPrivateKeyBase58);
-
-        const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey, phantomPublicKey, dappPrivateKeyUint8Array);
-        
-        const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappEncryptionPublicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
-        
-        toast.info("Открываем Phantom для подписания транзакции...");
-        window.location.href = deepLink;
-        return null; // Возвращаем null, потому что результат будет в callback
-      } catch (error) {
-        console.error('Error creating mobile transaction:', error);
-        toast.error('Ошибка создания транзакции');
-        return null;
-      }
+  if (isMobile()) {
+    if (!phantomSession || !phantomPublicKey) {
+      // Сначала нужно подключиться
+      await connectPhantomMobile();
+      return null;  // Прерываем функцию, ждем возврата от подключения
     }
 
-    // Phantom не найден
-    toast.error('Phantom Wallet не найден. Установите Phantom или откройте через мобильное приложение.');
-    return null;
-  };
+    try {
+      const connection = new Connection(SOLANA_NETWORK);
+      const fromPubkey = new PublicKey(phantomPublicKey);
+      const toPubkey = new PublicKey(RECEIVER_WALLET);
+      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+      );
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = fromPubkey;
+
+      const serialized = transaction.serializeMessage();
+      const base58Tx = bs58.encode(serialized);
+
+      const redirect = encodeURIComponent(window.location.origin + window.location.pathname);
+
+      const dappEncryptionKey = localStorage.getItem('phantom_encryption_key');
+      const dappPrivateKey = localStorage.getItem('phantom_private_key');
+      const phantomPk = phantomPublicKey;
+
+      if (!dappEncryptionKey || !dappPrivateKey) {
+        toast.error('Encryption keys missing, reconnect to Phantom.');
+        return null;
+      }
+
+     const nonce = generateRandomNonce();
+      const payload = { transaction: base58Tx, session: phantomSession };
+
+      const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionKey, phantomPk, bs58.decode(dappPrivateKey));
+
+      const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_key=${dappEncryptionKey}&nonce=${nonce}&redirect=${redirect}&payload=${encryptedPayload}`;
+
+      toast.info('Redirecting to Phantom for transaction signing...');
+      window.location.href = deepLink;
+
+      return null;  // Важное: прерываем выполнение, ожидаем callback
+
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to create transaction');
+      return null;
+    }
+  }
+
+  toast.error('Phantom Wallet not found');
+  return null;
+};
 
   // Подключение к Phantom на мобильном
   const connectPhantomMobile = async () => {
