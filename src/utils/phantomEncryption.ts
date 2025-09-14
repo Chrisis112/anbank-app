@@ -41,23 +41,45 @@ export const decryptPayload = (
   dappPrivateKeyBase58: string
 ): any | null => {
   try {
+    if (!encryptedBase58) throw new Error('Encrypted payload is empty');
+    if (!nonceBase58) throw new Error('Nonce is empty');
+    if (!dappPrivateKeyBase58) throw new Error('dApp private key is empty');
+
     const encrypted = bs58.decode(encryptedBase58);
     const nonce = bs58.decode(nonceBase58);
-    const phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
     const dappPrivateKey = bs58.decode(dappPrivateKeyBase58);
 
-    console.log('phantomPublicKey length:', phantomPublicKey.length);
     console.log('dappPrivateKey length:', dappPrivateKey.length);
 
-    if (phantomPublicKey.length !== 32) {
-      throw new Error(`Phantom public key has invalid length: ${phantomPublicKey.length}`);
-    }
     if (dappPrivateKey.length !== 32) {
       throw new Error(`dApp private key has invalid length: ${dappPrivateKey.length}`);
     }
 
+    // Если phantom public key пустой (при первом подключении), 
+    // используем dApp публичный ключ для расшифровки
+    let phantomPublicKey;
+    if (!phantomPublicKeyBase58) {
+      // Для connect операций используем dApp публичный ключ
+      const dappPublicKey = localStorage.getItem('phantom_dapp_public_key');
+      if (!dappPublicKey) {
+        throw new Error('dApp public key not found');
+      }
+      phantomPublicKey = bs58.decode(dappPublicKey);
+    } else {
+      phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
+    }
+
+    console.log('phantomPublicKey length:', phantomPublicKey.length);
+
+    if (phantomPublicKey.length !== 32) {
+      throw new Error(`Public key has invalid length: ${phantomPublicKey.length}`);
+    }
+
     const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKey, dappPrivateKey);
-    if (!decrypted) return null;
+    if (!decrypted) {
+      console.error('nacl.box.open returned null - decryption failed');
+      return null;
+    }
 
     const jsonStr = decodeUTF8(decrypted);
     return JSON.parse(jsonStr);

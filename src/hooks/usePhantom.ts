@@ -129,8 +129,8 @@ async function processCallbackFromUrl() {
     const data = decodeURIComponent(dataParam);
     const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
 
-    // Сначала расшифровываем без публичного ключа Phantom, чтобы получить public_key из результата
-    let decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
+    // Попытка расшифровки (функция сама определит, какой ключ использовать)
+    const decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
 
     if (!decrypted) {
       toast.error('Ошибка расшифровки данных Phantom');
@@ -139,29 +139,13 @@ async function processCallbackFromUrl() {
       return;
     }
 
-    if (!decrypted.public_key) {
-      toast.error('Phantom public key отсутствует в расшифрованных данных');
-      clearPhantomStorage();
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
-    // Сохраняем публичный ключ Phantom в localStorage и в состояние
-    localStorage.setItem('phantom_user_public_key', decrypted.public_key);
-    setPhantomPublicKey(decrypted.public_key);
-
-    // Повторно расшифровываем с сохраненным публичным ключом
-    const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
-    decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
-
-    if (!decrypted) {
-      toast.error('Ошибка повторной расшифровки данных Phantom');
-      clearPhantomStorage();
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
     console.log('Decrypted payload:', decrypted);
+
+    // Сохраняем phantom public key, если он есть в данных
+    if (decrypted.public_key) {
+      localStorage.setItem('phantom_user_public_key', decrypted.public_key);
+      setPhantomPublicKey(decrypted.public_key);
+    }
 
     const pendingAction = localStorage.getItem('phantom_pending_action');
 
@@ -171,7 +155,7 @@ async function processCallbackFromUrl() {
 
       const delayedAction = localStorage.getItem('phantom_delayed_action');
       if (delayedAction) {
-        localStorage.removeItem('delayedAction');
+        localStorage.removeItem('phantom_delayed_action');
         setTimeout(() => {
           if (delayedAction === 'registration' || delayedAction === 'subscription') {
             handlePhantomPayment();
@@ -180,9 +164,15 @@ async function processCallbackFromUrl() {
       }
     }
 
-    // Дополнительная логика для других pendingAction...
+    if (pendingAction === 'transaction') {
+      // Обработка подтверждения транзакции
+      if (decrypted.signature) {
+        toast.success('Транзакция подписана успешно!');
+        // Здесь можете добавить логику завершения регистрации/подписки
+      }
+      localStorage.removeItem('phantom_pending_action');
+    }
 
-    clearPhantomStorage();
     window.history.replaceState({}, '', window.location.pathname);
   } catch (error) {
     console.error('Exception in processCallbackFromUrl:', error);
@@ -191,6 +181,7 @@ async function processCallbackFromUrl() {
     window.history.replaceState({}, '', window.location.pathname);
   }
 }
+
 
 
 
