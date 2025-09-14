@@ -130,7 +130,8 @@ async function processCallbackFromUrl() {
 
     const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
 
-    // Попытка расшифровки без phantom public key
+    // Сначала пробуем расшифровать без Phantom public key (пустая строка),
+    // чтобы получить decrypted.public_key
     let decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
 
     if (!decrypted) {
@@ -140,7 +141,6 @@ async function processCallbackFromUrl() {
       return;
     }
 
-    // Сохраняем Phantom public key, если есть
     if (decrypted.public_key) {
       localStorage.setItem('phantom_user_public_key', decrypted.public_key);
       setPhantomPublicKey(decrypted.public_key);
@@ -151,8 +151,9 @@ async function processCallbackFromUrl() {
       return;
     }
 
-    // Если нужно, повторно расшифровать с уже сохраненным ключом
+    // Теперь берём Phantom public key из localStorage
     const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
+
     decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
 
     if (!decrypted) {
@@ -164,8 +165,8 @@ async function processCallbackFromUrl() {
 
     console.log('Decrypted payload:', decrypted);
 
-    // Далее обработка decrypted и ваших действий
     const pendingAction = localStorage.getItem('phantom_pending_action');
+
     if (pendingAction === 'connect') {
       toast.success('Подключено к Phantom Wallet!');
       localStorage.removeItem('phantom_pending_action');
@@ -181,7 +182,8 @@ async function processCallbackFromUrl() {
       }
     }
 
-    // Очистка и завершение
+    // Здесь добавьте логику для обработки других pendingAction, если нужно
+
     clearPhantomStorage();
     window.history.replaceState({}, '', window.location.pathname);
   } catch (error) {
@@ -191,6 +193,7 @@ async function processCallbackFromUrl() {
     window.history.replaceState({}, '', window.location.pathname);
   }
 }
+
 
 
   async function handlePhantomPayment(): Promise<string | null> {
