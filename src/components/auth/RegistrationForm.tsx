@@ -14,13 +14,15 @@ import {
   Connection,
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
+import bs58 from 'bs58';
+import { generateRandomNonce, encryptPayload } from '@/utils/phantomEncryption'; // Нужно создать эти утилиты
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
 export default function RegistrationForm() {
   const router = useRouter();
   const register = useAuthStore((state) => state.register);
-  const { setUser } = useUserStore(); // Для установки пользователя при логине
+  const { setUser } = useUserStore();
 
   // Registration states
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
@@ -31,7 +33,7 @@ export default function RegistrationForm() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-    const [promoCode, setPromoCode] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState<string | null>(null);
   const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
 
   // Login modal states
@@ -40,6 +42,10 @@ export default function RegistrationForm() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  // Phantom session storage
+  const [phantomSession, setPhantomSession] = useState<string | null>(null);
+  const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
 
   // Abort controller for login request cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -50,89 +56,216 @@ export default function RegistrationForm() {
   const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.01');
 
   useEffect(() => {
+    // Проверяем URL на наличие callback параметров от Phantom
+    const urlParams = new URLSearchParams(window.location.search);
+    const nonce = urlParams.get('nonce');
+    const data = urlParams.get('data');
+    const errorCode = urlParams.get('errorCode');
+    const errorMessage = urlParams.get('errorMessage');
+
+    if (errorCode) {
+      toast.error(`Phantom error: ${errorMessage || errorCode}`);
+      // Очистить URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+
+    if (nonce && data) {
+      // Обработать успешный ответ от Phantom
+      handlePhantomCallback(nonce, data);
+      // Очистить URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     return () => {
       abortControllerRef.current?.abort();
     };
   }, []);
 
-  const handlePhantomPayment = async (): Promise<string | null> => {
+  // Функция определения мобильного устройства
+  const isMobile = () => {
+    return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  };
+
+  // Обработка callback от Phantom
+  const handlePhantomCallback = async (nonce: string, encryptedData: string) => {
     try {
-      const provider = (window as any).solana;
-      if (!provider?.isPhantom) {
-        toast.error('Phantom Wallet not found');
-        return null;
-      }
-      await provider.connect();
-
-      const connection = new Connection(SOLANA_NETWORK);
-      const fromPubkey = provider.publicKey;
-      const toPubkey = new PublicKey(RECEIVER_WALLET);
-      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
-
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey,
-          toPubkey,
-          lamports,
-        })
-      );
-
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = fromPubkey;
-
-      const signed = await provider.signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signed.serialize());
-      await connection.confirmTransaction(signature, 'confirmed');
-
-      toast.success('✅ Payment successful!');
-      return signature;
-    } catch (err) {
-      toast.error('Payment failed');
-      return null;
+      // Здесь нужно расшифровать данные и обработать результат
+      // Для простоты пока просто логируем
+      console.log('Phantom callback received:', { nonce, encryptedData });
+      toast.success('Транзакция подписана в Phantom!');
+      
+      // TODO: Расшифровать данные, получить подпись и завершить регистрацию/оплату
+    } catch (error) {
+      console.error('Error handling Phantom callback:', error);
+      toast.error('Ошибка обработки ответа от Phantom');
     }
   };
-  const handleRenewSubscription = async () => {
-  const provider = (window as any).solana;
-  if (!provider?.isPhantom) {
-    toast.error('Phantom Wallet not found');
-    return;
-  }
-  const solanaPublicKey = provider.publicKey?.toBase58();
-  if (!solanaPublicKey) {
-    toast.error('Failed to get Phantom public key');
-    return;
-  }
 
-  const signature = await handlePhantomPayment();
-  if (!signature) return;
+  // Исправленная функция handlePhantomPayment
+  const handlePhantomPayment = async (): Promise<string | null> => {
+    const provider = (window as any).solana;
+    
+    // Десктоп: расширение Phantom
+    if (provider && provider.isPhantom && !isMobile()) {
+      try {
+        await provider.connect();
+        const connection = new Connection(SOLANA_NETWORK);
+        const fromPubkey = provider.publicKey;
+        const toPubkey = new PublicKey(RECEIVER_WALLET);
+        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
 
-  try {
-    const { data } = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
-      {
-        txSignature: signature,
-        solanaPublicKey,
-        email: loginEmail, // обязательно передаем email по которому искать пользователя
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+        );
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = fromPubkey;
+
+        const signed = await provider.signTransaction(transaction);
+        const signature = await connection.sendRawTransaction(signed.serialize());
+        await connection.confirmTransaction(signature, 'confirmed');
+
+        toast.success('✅ Payment successful!');
+        return signature;
+      } catch (err) {
+        toast.error('Payment failed');
+        return null;
       }
-      // без дополнительных заголовков Authorization
-    );
+    }
+    
+    // Мобильные устройства: deeplink для транзакции
+    if (isMobile()) {
+      if (!phantomSession || !phantomPublicKey) {
+        // Сначала нужно подключиться
+        await connectPhantomMobile();
+        return null;
+      }
 
-    toast.success('Subscription successfully renewed!');
-  localStorage.setItem('token', data.token); // Обновляем токен
-  setUser(data.user);
-    setIsSubscriptionModalOpen(false);
-    setUser(data.user);
-    router.push('/chat');
-  } catch (err) {
-    toast.error(
-      axios.isAxiosError(err) && err.response?.data?.error
-        ? err.response.data.error
-        : 'Error renewing subscription'
-    );
-  }
-};
+      try {
+        // Создаем транзакцию
+        const connection = new Connection(SOLANA_NETWORK);
+        const fromPubkey = new PublicKey(phantomPublicKey);
+        const toPubkey = new PublicKey(RECEIVER_WALLET);
+        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
 
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+        );
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = fromPubkey;
+
+        // Сериализуем транзакцию
+        const serializedTransaction = transaction.serializeMessage();
+        const base58Transaction = bs58.encode(serializedTransaction);
+
+        // Создаем deeplink для подписания транзакции
+        const currentUrl = window.location.origin + window.location.pathname;
+        const redirectLink = encodeURIComponent(currentUrl);
+        
+        // Здесь нужны ваши ключи шифрования (сохраненные при подключении)
+        const dappEncryptionPublicKey = localStorage.getItem('phantom_dapp_public_key');
+        if (!dappEncryptionPublicKey) {
+          toast.error('Нет ключей шифрования. Переподключитесь к Phantom.');
+          return null;
+        }
+
+        const nonce = generateRandomNonce();
+        const payload = {
+          transaction: base58Transaction,
+          session: phantomSession
+        };
+        
+        const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey, phantomPublicKey);
+
+        
+        const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappEncryptionPublicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
+        
+        toast.info("Открываем Phantom для подписания транзакции...");
+        window.location.href = deepLink;
+        return null;
+      } catch (error) {
+        console.error('Error creating mobile transaction:', error);
+        toast.error('Ошибка создания транзакции');
+        return null;
+      }
+    }
+
+    // Phantom не найден
+    toast.error('Phantom Wallet не найден. Установите Phantom или откройте через мобильное приложение.');
+    return null;
+  };
+
+  // Подключение к Phantom на мобильном
+  const connectPhantomMobile = async () => {
+    if (!isMobile()) return;
+
+    try {
+      const currentUrl = window.location.origin + window.location.pathname;
+      const appUrl = encodeURIComponent(currentUrl);
+      const redirectLink = encodeURIComponent(currentUrl);
+      
+      // Здесь нужно генерировать ключи шифрования
+      const dappEncryptionPublicKey = localStorage.getItem('phantom_dapp_public_key') || 'YOUR_DAPP_PUBLIC_KEY';
+      
+      const deepLink = `https://phantom.app/ul/v1/connect?app_url=${appUrl}&dapp_encryption_public_key=${dappEncryptionPublicKey}&redirect_link=${redirectLink}&cluster=mainnet-beta`;
+      
+      toast.info("Подключаемся к Phantom...");
+      window.location.href = deepLink;
+    } catch (error) {
+      console.error('Error connecting to Phantom mobile:', error);
+      toast.error('Ошибка подключения к Phantom');
+    }
+  };
+
+  // Остальной код остается тем же...
+  const handleRenewSubscription = async () => {
+    const provider = (window as any).solana;
+    let solanaPublicKey = null;
+    let signature = null;
+
+    if (provider?.isPhantom && !isMobile()) {
+      solanaPublicKey = provider.publicKey?.toBase58();
+      if (!solanaPublicKey) {
+        toast.error('Failed to get Phantom public key');
+        return;
+      }
+      signature = await handlePhantomPayment();
+      if (!signature) return;
+    } else if (isMobile()) {
+      await handlePhantomPayment();
+      toast.info("После подписания транзакции в Phantom вернитесь для завершения.");
+      return;
+    } else {
+      toast.error('Phantom Wallet not found');
+      return;
+    }
+
+    try {
+      const { data } = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
+        {
+          txSignature: signature,
+          solanaPublicKey,
+          email: loginEmail,
+        }
+      );
+      toast.success('Subscription successfully renewed!');
+      localStorage.setItem('token', data.token);
+      setUser(data.user);
+      setIsSubscriptionModalOpen(false);
+      router.push('/chat');
+    } catch (err) {
+      toast.error(
+        axios.isAxiosError(err) && err.response?.data?.error
+          ? err.response.data.error
+          : 'Error renewing subscription'
+      );
+    }
+  };
+
+  // Остальные функции остаются теми же...
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
     setPromoCodeError(null);
@@ -143,58 +276,79 @@ export default function RegistrationForm() {
     setPromoCodeError(message);
   };
 
-
   const checkUnique = async (email: string, nickname: string) => {
     try {
       const { data } = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/auth/check-unique`,
         { params: { email, nickname } }
       );
-      return data; // { emailExists, nicknameExists }
+      return data;
     } catch (error) {
       return { emailExists: true, nicknameExists: true };
     }
   };
-const handleRegisterSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
 
-  if (!nickname || !email || !password || !confirmPassword) {
-    toast.error(`Fill all fields`);
-    return;
-  }
-  if (password !== confirmPassword) {
-    toast.error(`Passwords do not match`);
-    return;
-  }
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  setLoading(true);
+    if (!nickname || !email || !password || !confirmPassword) {
+      toast.error('Fill all fields');
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
 
-  // Проверка уникальности email и никнейма
-  const { emailExists, nicknameExists } = await checkUnique(email, nickname);
-  if (emailExists) {
-    toast.error('Email is already in use');
-    setLoading(false);
-    return;
-  }
-  if (nicknameExists) {
-    toast.error('Nickname is already in use');
-    setLoading(false);
-    return;
-  }
+    setLoading(true);
 
-  try {
-    // Если есть валидный промокод — регистрируем без оплаты
-    if (promoCode) {
-      const result = await register(
-        nickname,
-        email,
-        password,
-        role,
-        null,           // solanaPublicKey не нужен
-        null,           // paymentSignature не нужен
-        promoCode       // передаем промокод
-      );
+    const { emailExists, nicknameExists } = await checkUnique(email, nickname);
+    if (emailExists) {
+      toast.error('Email is already in use');
+      setLoading(false);
+      return;
+    }
+    if (nicknameExists) {
+      toast.error('Nickname is already in use');
+      setLoading(false);
+      return;
+    }
 
+    try {
+      if (promoCode) {
+        const result = await register(nickname, email, password, role, null, null, promoCode);
+        setLoading(false);
+        if (result.success) {
+          toast.success('Registration successful!');
+          router.push('/chat');
+        } else {
+          toast.error(result.error || 'Registration failed');
+        }
+        return;
+      }
+
+      const paymentSignature = await handlePhantomPayment();
+      
+      if (isMobile()) {
+        setLoading(false);
+        toast.info("После завершения оплаты в Phantom вернитесь для завершения регистрации.");
+        return;
+      }
+      
+      if (!paymentSignature) {
+        toast.error('Payment failed');
+        setLoading(false);
+        return;
+      }
+
+      const solanaPublicKey = (window as any).solana?.publicKey?.toBase58();
+      if (!solanaPublicKey) {
+        toast.error('Failed to get public key');
+        setLoading(false);
+        return;
+      }
+
+      const result = await register(nickname, email, password, role, solanaPublicKey, paymentSignature, null);
       setLoading(false);
 
       if (result.success) {
@@ -203,102 +357,64 @@ const handleRegisterSubmit = async (e: React.FormEvent) => {
       } else {
         toast.error(result.error || 'Registration failed');
       }
-      return; // Важно прервать дальнейшее выполнение, иначе пойдет оплата
-    }
-
-    // Иначе проводим оплату через Phantom Wallet
-    const paymentSignature = await handlePhantomPayment();
-    if (!paymentSignature) {
-      toast.error(  'Payment failed');
+    } catch {
       setLoading(false);
-      return;
+      toast.error('Registration failed');
     }
+  };
 
-    const solanaPublicKey = (window as any).solana?.publicKey?.toBase58();
-    if (!solanaPublicKey) {
-      toast.error( 'Failed to get public key');
-      setLoading(false);
-      return;
-    }
+  // Остальные функции и JSX остаются теми же...
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError(null);
 
-    // Регистрация с оплатой
-    const result = await register(
-      nickname,
-      email,
-      password,
-      role,
-      solanaPublicKey,
-      paymentSignature,
-      null // без промокода
-    );
+    try {
+      abortControllerRef.current = new AbortController();
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
+        { email: loginEmail, password: loginPassword },
+        {
+          signal: abortControllerRef.current.signal,
+          timeout: 10000,
+        }
+      );
 
-    setLoading(false);
+      localStorage.setItem('token', res.data.token);
 
-    if (result.success) {
-      toast.success( 'Registration successful!');
+      if (res.data.user) {
+        setUser({
+          id: res.data.user._id || res.data.user.id,
+          nickname: res.data.user.nickname,
+          email: res.data.user.email,
+          avatar: res.data.user.avatar || undefined,
+          role: res.data.user.role || 'newbie',
+          subscriptionExpiresAt: res.data.user.subscriptionExpiresAt || undefined,
+        });
+      }
+
+      toast.success('Login successful!');
+      setIsLoginModalOpen(false);
       router.push('/chat');
-    } else {
-      toast.error(result.error ||  'Registration failed');
-    }
-  } catch {
-    setLoading(false);
-    toast.error( 'Registration failed');
-  }
-};
-
-
-const handleLoginSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoginLoading(true);
-  setLoginError(null);
-
-  try {
-    abortControllerRef.current = new AbortController();
-    const res = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
-      { email: loginEmail, password: loginPassword },
-      {
-        signal: abortControllerRef.current.signal,
-        timeout: 10000,
-      }
-    );
-
-    localStorage.setItem('token', res.data.token);
-
-    if (res.data.user) {
-      setUser({
-        id: res.data.user._id || res.data.user.id,
-        nickname: res.data.user.nickname,
-        email: res.data.user.email,
-        avatar: res.data.user.avatar || undefined,
-        role: res.data.user.role || 'newbie',
-        subscriptionExpiresAt: res.data.user.subscriptionExpiresAt || undefined,
-      });
-    }
-
-    toast.success('Login successful!');
-    setIsLoginModalOpen(false);
-    router.push('/chat');
-  } catch (err: unknown) {
-    if (axios.isCancel(err)) {
-      // Request was cancelled
-    } else if (axios.isAxiosError(err)) {
-      // Проверим, не отключена ли подписка
-      if (err.response?.data?.reason === 'subscription_inactive') {
-        setIsLoginModalOpen(false);
-        setIsSubscriptionModalOpen(true); // Открываем окно продления подписки
+    } catch (err: unknown) {
+      if (axios.isCancel(err)) {
+        // Request was cancelled
+      } else if (axios.isAxiosError(err)) {
+        if (err.response?.data?.reason === 'subscription_inactive') {
+          setIsLoginModalOpen(false);
+          setIsSubscriptionModalOpen(true);
+        } else {
+          setLoginError(
+            err.response?.data?.error || 'Login error. Check your email and password.'
+          );
+        }
       } else {
-        setLoginError(
-          err.response?.data?.error ||  'Login error. Check your email and password.'
-        );
+        setLoginError('Login error. Check your email and password.');
       }
-    } else {
-      setLoginError( 'Login error. Check your email and password.');
+    } finally {
+      setLoginLoading(false);
     }
-  } finally {
-    setLoginLoading(false);
-  }
-};
+  };
 
   const openLoginModal = () => {
     setIsLoginModalOpen(true);
@@ -412,10 +528,12 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
                   <option value="creator">Creator</option>
                 </select>
               </div>
-                 <PromoCodeInput
-        onSuccess={handlePromoSuccess}
-        onFail={handlePromoFail}
-      />
+              
+              <PromoCodeInput
+                onSuccess={handlePromoSuccess}
+                onFail={handlePromoFail}
+              />
+              
               <button
                 type="submit"
                 disabled={loading}
@@ -432,7 +550,6 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
       {isLoginModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-crypto-dark rounded-xl shadow-2xl w-full max-w-md p-6 relative">
-            {/* Close button */}
             <button
               onClick={closeLoginModal}
               className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
@@ -445,7 +562,7 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
             </button>
 
             <h2 className="text-2xl font-orbitron gradient-title mb-6 text-center text-crypto-accent">
-              { 'Login'}
+              Login
             </h2>
 
             {loginError && (
@@ -460,7 +577,7 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
             <form onSubmit={handleLoginSubmit} className="space-y-4" noValidate>
               <div>
                 <label htmlFor="loginEmail" className="block text-sm mb-1 text-white font-semibold">
-                  { 'Email'}
+                  Email
                 </label>
                 <input
                   type="email"
@@ -477,7 +594,7 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
 
               <div>
                 <label htmlFor="loginPassword" className="block text-sm mb-1 text-white font-semibold">
-                  { 'Password'}
+                  Password
                 </label>
                 <input
                   type="password"
@@ -496,49 +613,46 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
                 disabled={loginLoading}
                 className="w-full py-3 rounded-lg font-bold transition-colors text-lg bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loginLoading ? ( 'Loading...') : ( 'Login')}
+                {loginLoading ? 'Loading...' : 'Login'}
               </button>
             </form>
           </div>
         </div>
       )}
-{/* Subscription Modal */}
-{isSubscriptionModalOpen && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-    <div className="bg-crypto-dark rounded-xl shadow-2xl w-full max-w-md p-6 relative">
 
-      {/* Close */}
-      <button
-        onClick={() => setIsSubscriptionModalOpen(false)}
-        className="absolute top-4 right-4 text-gray-400 hover:text-white"
-      >
-        ✕
-      </button>
+      {/* Subscription Modal */}
+      {isSubscriptionModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-crypto-dark rounded-xl shadow-2xl w-full max-w-md p-6 relative">
+            <button
+              onClick={() => setIsSubscriptionModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white"
+            >
+              ✕
+            </button>
 
-      <h2 className="text-2xl font-orbitron text-center text-crypto-accent mb-4">
-        Renew your subscription
-      </h2>
+            <h2 className="text-2xl font-orbitron text-center text-crypto-accent mb-4">
+              Renew your subscription
+            </h2>
 
-      <p className="text-gray-300 text-center mb-6">
-       Your subscription has expired. To continue using the app, please renew it.
-      </p>
+            <p className="text-gray-300 text-center mb-6">
+              Your subscription has expired. To continue using the app, please renew it.
+            </p>
 
-      <p className="text-gray-400 text-center mb-6 italic">
-       Please note that the subscription will be extended for the user: <br />
-        <span className="font-semibold text-white">{loginEmail}</span>
-      </p>
+            <p className="text-gray-400 text-center mb-6 italic">
+              Please note that the subscription will be extended for the user: <br />
+              <span className="font-semibold text-white">{loginEmail}</span>
+            </p>
 
-      <button
-        onClick={handleRenewSubscription}
-        className="w-full py-3 rounded-lg font-bold bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent"
-      >
-        Pay via Phantom Wallet
-      </button>
-    </div>
-  </div>
-)}
-
-
+            <button
+              onClick={handleRenewSubscription}
+              className="w-full py-3 rounded-lg font-bold bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent"
+            >
+              Pay via Phantom Wallet
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
