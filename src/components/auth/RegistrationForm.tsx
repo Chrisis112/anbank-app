@@ -130,12 +130,11 @@ useEffect(() => {
           dappPrivateKey: dappPrivateKey ? 'present' : 'missing',
           phantomPublicKey: phantomPublicKey ? 'present' : 'missing',
           nonce: nonce.substring(0, 10) + '...',
-          data: data.substring(0, 10) + '...'
+          data: data.substring(0, 10) + '...',
         });
 
-        // ИСПРАВЛЕН порядок параметров: data, nonce, phantomPublicKey, dappPrivateKey
-const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
-
+        // Вызов decryptPayload с правильным порядком параметров
+        const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
 
         if (!decrypted) {
           console.error('Failed to decrypt payload');
@@ -147,20 +146,16 @@ const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
 
         console.log('Decrypted data:', decrypted);
 
-        // Определяем тип операции
         const pendingAction = localStorage.getItem('phantom_pending_action');
-        
+
         if (pendingAction === 'connect') {
-          // Обработка подключения
           if (decrypted.public_key) {
             const userPublicKey = decrypted.public_key;
             localStorage.setItem('phantom_user_public_key', userPublicKey);
             setPhantomPublicKey(userPublicKey);
             toast.success('Подключено к Phantom Wallet!');
-            
             localStorage.removeItem('phantom_pending_action');
             
-            // Проверяем отложенные действия
             const delayedAction = localStorage.getItem('phantom_delayed_action');
             if (delayedAction) {
               localStorage.removeItem('phantom_delayed_action');
@@ -174,7 +169,6 @@ const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
           return;
         }
 
-        // Обработка транзакции
         if (pendingAction === 'transaction' || pendingAction === 'registration' || pendingAction === 'subscription') {
           const paymentSignature = decrypted.signature;
           const solanaPublicKey = decrypted.public_key || phantomPublicKey;
@@ -242,8 +236,8 @@ const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
 
         clearPhantomStorage();
         window.history.replaceState({}, '', window.location.pathname);
-      } catch (e) {
-        console.error('Ошибка обработки callback Phantom:', e);
+      } catch (error) {
+        console.error('Ошибка обработки callback Phantom:', error);
         toast.error('Ошибка обработки ответа от Phantom');
         clearPhantomStorage();
         window.history.replaceState({}, '', window.location.pathname);
@@ -253,32 +247,6 @@ const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
   processCallback();
 
   return () => abortControllerRef.current?.abort();
-}, []);
-useEffect(() => {
-  async function processCallback() {
-    const params = new URLSearchParams(window.location.search);
-    const nonce = params.get('nonce');
-    const data = params.get('data');
-    const errorCode = params.get('errorCode');
-
-    if (errorCode) {
-      // Обработка ошибок Phantom
-      toast.error(`Phantom error: ${params.get('errorMessage') || errorCode}`);
-       clearPhantomStorage();
-      return;
-    }
-
-    if (nonce && data) {
-      await handlePhantomCallback(decodeURIComponent(nonce), decodeURIComponent(data));
-       clearPhantomStorage();
-    }
-  }
-
-  processCallback();
-
-  return () => {
-    abortControllerRef.current?.abort();  // для отмены запросов, если нужно
-  }
 }, []);
 
 
