@@ -15,7 +15,7 @@ import {
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { generateRandomNonce, encryptPayload, decryptPayload } from '@/utils/phantomEncryption';
+import { generateRandomNonce, generateDappKeypair, encryptPayload, decryptPayload } from '@/utils/phantomEncryption';
 import nacl from 'tweetnacl';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
@@ -46,16 +46,16 @@ export default function RegistrationForm() {
 
   // Phantom session storage
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
-const [dappKeys, setDappKeys] = useState<{ publicKey: string; privateKey: string }>(() => {
-  // Логика инициализации, например получение из localStorage или генерация новых ключей
-  const pub = localStorage.getItem('phantom_dapp_public_key');
-  const priv = localStorage.getItem('phantom_dapp_private_key');
-  if (pub && priv) {
-    return { publicKey: pub, privateKey: priv };
-  }
-  // Иначе верните пустые строки или сгенерируйте новые ключи
-  return { publicKey: '', privateKey: '' };
-});
+  const [dappKeys, setDappKeys] = useState<{ publicKey: string; privateKey: string }>(() => {
+    // Инициализация dApp ключей из localStorage или генерация
+    const pub = localStorage.getItem('phantom_dapp_public_key');
+    const priv = localStorage.getItem('phantom_dapp_private_key');
+    if (pub && priv) return { publicKey: pub, privateKey: priv };
+    const keys = generateDappKeypair();
+    localStorage.setItem('phantom_dapp_public_key', keys.publicKey);
+    localStorage.setItem('phantom_dapp_private_key', keys.privateKey);
+    return keys;
+  });
   // Abort controller for login request cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
 

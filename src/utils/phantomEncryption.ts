@@ -33,6 +33,8 @@ export const encryptPayload = (
   return bs58.encode(encrypted);
 };
 
+
+
 export const decryptPayload = (
   encryptedBase58: string,
   nonceBase58: string,
