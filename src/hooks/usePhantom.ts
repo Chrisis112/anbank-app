@@ -112,68 +112,69 @@ async function processCallbackFromUrl() {
   const errorCode = params.get('errorCode');
   const errorMessage = params.get('errorMessage');
 
-  console.log('Phantom callback params:', { 
-    hasNonce: !!nonceParam, 
-    hasData: !!dataParam, 
-    errorCode, 
-    errorMessage,
-    nonceLength: nonceParam?.length,
-    dataLength: dataParam?.length 
-  });
+  console.log('Callback params:', { nonce: nonceParam, data: dataParam, errorCode, errorMessage });
 
   if (errorCode) {
     toast.error(`Phantom error: ${errorMessage || errorCode}`);
-    clearPhantomStorage();
+    clearStorage();
     window.history.replaceState({}, '', window.location.pathname);
     return;
   }
 
   if (!nonceParam || !dataParam) {
-    console.log('Phantom callback missing nonce or data param');
+    console.warn('Missing nonce or data in Phantom callback');
     return;
   }
 
   try {
     const nonce = decodeURIComponent(nonceParam);
     const data = decodeURIComponent(dataParam);
-    const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
 
-    console.log('Processing callback with:', {
-      nonceDecoded: nonce.slice(0, 10) + '...',
-      dataDecoded: data.slice(0, 20) + '...',
-      dappPrivateKeyExists: !!dappPrivateKey
-    });
+    const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key');
+    if (!dappPrivateKey) {
+      throw new Error('Missing DApp private key');
+    }
 
-    // Попытка расшифровки
-    const decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
-
+    // Первый этап: расшифровка без Prism public key, чтобы получить его из данных
+    let decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
+    
     if (!decrypted) {
-      console.error('Failed to decrypt Phantom data');
-      toast.error('Не удалось расшифровать данные Phantom. Попробуйте переподключиться.');
-      clearPhantomStorage();
+      toast.error('Failed to decrypt Phantom payload. Please reconnect your wallet.');
+      clearStorage();
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+    if (!decrypted.public_key) {
+      toast.error('Phantom public key missing in decrypted payload.');
+      clearStorage();
       window.history.replaceState({}, '', window.location.pathname);
       return;
     }
 
-    console.log('Successfully decrypted payload:', decrypted);
+    // Сохраняем Phantom public key
+    localStorage.setItem('phantom_user_public_key', decrypted.public_key);
+    setPhantomPublicKey(decrypted.public_key);
 
-    // Сохраняем phantom public key, если он есть в данных
-    if (decrypted.public_key) {
-      console.log('Saving Phantom public key:', decrypted.public_key.slice(0, 10) + '...');
-      localStorage.setItem('phantom_user_public_key', decrypted.public_key);
-      setPhantomPublicKey(decrypted.public_key);
+    // Второй этап: полноценная расшифровка с правильным Phantom public key
+    decrypted = decryptPayload(data, nonce, decrypted.public_key, dappPrivateKey);
+    if (!decrypted) {
+      toast.error('Failed to decrypt Phantom payload with stored public key.');
+      clearStorage();
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
     }
 
+    console.log('Decrypted payload:', decrypted);
+
     const pendingAction = localStorage.getItem('phantom_pending_action');
-    console.log('Pending action:', pendingAction);
 
     if (pendingAction === 'connect') {
-      toast.success('Подключено к Phantom Wallet!');
+      toast.success('Connected to Phantom Wallet!');
       localStorage.removeItem('phantom_pending_action');
 
-      const delayedAction = localStorage.getItem('phantom_delayed_action');
+      const delayedAction = localStorage.getItem('delayedAction');
       if (delayedAction) {
-        localStorage.removeItem('phantom_delayed_action');
+        localStorage.removeItem('delayedAction');
         setTimeout(() => {
           if (delayedAction === 'registration' || delayedAction === 'subscription') {
             handlePhantomPayment();
@@ -184,20 +185,30 @@ async function processCallbackFromUrl() {
 
     if (pendingAction === 'transaction') {
       if (decrypted.signature) {
-        toast.success('Транзакция подписана успешно!');
-        console.log('Transaction signature:', decrypted.signature);
+        toast.success('Payment signature confirmed!');
       }
       localStorage.removeItem('phantom_pending_action');
     }
 
     window.history.replaceState({}, '', window.location.pathname);
   } catch (error) {
-    console.error('Exception in processCallbackFromUrl:', error);
-    toast.error('Ошибка обработки ответа от Phantom');
-    clearPhantomStorage();
+    console.error('Error processing Phantom callback:', error);
+    toast.error('Error handling Phantom callback, please try again.');
+    clearStorage();
     window.history.replaceState({}, '', window.location.pathname);
   }
 }
+
+function clearStorage() {
+  localStorage.removeItem('phantom_user_public_key');
+  localStorage.removeItem('phantom_dapp_private_key');
+  localStorage.removeItem('phantom_dapp_public_key');
+  localStorage.removeItem('phantom_pending_action');
+  localStorage.removeItem('phantom_registration_data');
+  localStorage.removeItem('phantom_subscription_data');
+  localStorage.removeItem('delayedAction');
+}
+
 
 
   async function handlePhantomPayment(): Promise<string | null> {
