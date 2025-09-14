@@ -128,49 +128,35 @@ async function processCallbackFromUrl() {
     const nonce = decodeURIComponent(nonceParam);
     const data = decodeURIComponent(dataParam);
 
-    console.log('Phantom callback params:', {
-      nonce: nonce.slice(0, 10) + '...',
-      data: data.slice(0, 10) + '...',
-    });
-
     const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
 
-    // На первом шаге не используем phantomPublicKeyInStorage, т.к. его может не быть
-    // Пробуем расшифровать без ключа Phantom, чтобы получить decrypted.public_key
-    const decryptedForConnect = decryptPayload(data, nonce, "", dappPrivateKey);
-
-    if (!decryptedForConnect) {
-      toast.error('Ошибка расшифровки данных Phantom');
-      clearPhantomStorage();
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
-    console.log('Decrypted payload for connect:', decryptedForConnect);
-
-    if (decryptedForConnect.public_key) {
-      const userPublicKey = decryptedForConnect.public_key;
-      // Сохраняем публичный ключ Phantom в localStorage и в состояние
-      localStorage.setItem('phantom_user_public_key', userPublicKey);
-      setPhantomPublicKey(userPublicKey);
-    }
-
-    // Используем только что сохранённый phantomPublicKey для дальнейшей расшифровки
-    const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
-
-    if (!phantomPublicKeyInStorage) {
-      console.error('Phantom public key missing in localStorage');
-      toast.error('Ошибка: не найден публичный ключ Phantom');
-      clearPhantomStorage();
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
-    const decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
+    // Попытка расшифровки без phantom public key
+    let decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
 
     if (!decrypted) {
-      console.error('Decryption returned null - likely keys mismatch or corrupted data');
       toast.error('Ошибка расшифровки данных Phantom');
+      clearPhantomStorage();
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    // Сохраняем Phantom public key, если есть
+    if (decrypted.public_key) {
+      localStorage.setItem('phantom_user_public_key', decrypted.public_key);
+      setPhantomPublicKey(decrypted.public_key);
+    } else {
+      toast.error('Phantom public key отсутствует в данных');
+      clearPhantomStorage();
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    // Если нужно, повторно расшифровать с уже сохраненным ключом
+    const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
+    decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
+
+    if (!decrypted) {
+      toast.error('Ошибка повторной расшифровки данных Phantom');
       clearPhantomStorage();
       window.history.replaceState({}, '', window.location.pathname);
       return;
@@ -178,8 +164,8 @@ async function processCallbackFromUrl() {
 
     console.log('Decrypted payload:', decrypted);
 
+    // Далее обработка decrypted и ваших действий
     const pendingAction = localStorage.getItem('phantom_pending_action');
-
     if (pendingAction === 'connect') {
       toast.success('Подключено к Phantom Wallet!');
       localStorage.removeItem('phantom_pending_action');
@@ -195,8 +181,7 @@ async function processCallbackFromUrl() {
       }
     }
 
-    // Здесь можно добавить обработку других pendingAction: transaction, registration, subscription ...
-
+    // Очистка и завершение
     clearPhantomStorage();
     window.history.replaceState({}, '', window.location.pathname);
   } catch (error) {
