@@ -112,6 +112,15 @@ async function processCallbackFromUrl() {
   const errorCode = params.get('errorCode');
   const errorMessage = params.get('errorMessage');
 
+  console.log('Phantom callback params:', { 
+    hasNonce: !!nonceParam, 
+    hasData: !!dataParam, 
+    errorCode, 
+    errorMessage,
+    nonceLength: nonceParam?.length,
+    dataLength: dataParam?.length 
+  });
+
   if (errorCode) {
     toast.error(`Phantom error: ${errorMessage || errorCode}`);
     clearPhantomStorage();
@@ -129,25 +138,34 @@ async function processCallbackFromUrl() {
     const data = decodeURIComponent(dataParam);
     const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
 
-    // Попытка расшифровки (функция сама определит, какой ключ использовать)
+    console.log('Processing callback with:', {
+      nonceDecoded: nonce.slice(0, 10) + '...',
+      dataDecoded: data.slice(0, 20) + '...',
+      dappPrivateKeyExists: !!dappPrivateKey
+    });
+
+    // Попытка расшифровки
     const decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
 
     if (!decrypted) {
-      toast.error('Ошибка расшифровки данных Phantom');
+      console.error('Failed to decrypt Phantom data');
+      toast.error('Не удалось расшифровать данные Phantom. Попробуйте переподключиться.');
       clearPhantomStorage();
       window.history.replaceState({}, '', window.location.pathname);
       return;
     }
 
-    console.log('Decrypted payload:', decrypted);
+    console.log('Successfully decrypted payload:', decrypted);
 
     // Сохраняем phantom public key, если он есть в данных
     if (decrypted.public_key) {
+      console.log('Saving Phantom public key:', decrypted.public_key.slice(0, 10) + '...');
       localStorage.setItem('phantom_user_public_key', decrypted.public_key);
       setPhantomPublicKey(decrypted.public_key);
     }
 
     const pendingAction = localStorage.getItem('phantom_pending_action');
+    console.log('Pending action:', pendingAction);
 
     if (pendingAction === 'connect') {
       toast.success('Подключено к Phantom Wallet!');
@@ -165,10 +183,9 @@ async function processCallbackFromUrl() {
     }
 
     if (pendingAction === 'transaction') {
-      // Обработка подтверждения транзакции
       if (decrypted.signature) {
         toast.success('Транзакция подписана успешно!');
-        // Здесь можете добавить логику завершения регистрации/подписки
+        console.log('Transaction signature:', decrypted.signature);
       }
       localStorage.removeItem('phantom_pending_action');
     }
@@ -181,9 +198,6 @@ async function processCallbackFromUrl() {
     window.history.replaceState({}, '', window.location.pathname);
   }
 }
-
-
-
 
 
   async function handlePhantomPayment(): Promise<string | null> {
