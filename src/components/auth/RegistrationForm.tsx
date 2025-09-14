@@ -176,9 +176,14 @@ export default function RegistrationForm() {
           transaction: base58Transaction,
           session: phantomSession
         };
-        
-        const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey, phantomPublicKey);
+const dappPrivateKeyBase58 = localStorage.getItem('phantom_dapp_private_key');
+if (!dappPrivateKeyBase58) {
+  toast.error('Нет приватного ключа dApp для шифрования.');
+  return null;
+}
+const dappPrivateKeyUint8Array = bs58.decode(dappPrivateKeyBase58);
 
+const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey, phantomPublicKey, dappPrivateKeyUint8Array);
         
         const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappEncryptionPublicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
         
