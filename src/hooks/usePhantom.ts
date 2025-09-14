@@ -130,8 +130,7 @@ async function processCallbackFromUrl() {
 
     const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
 
-    // Сначала пробуем расшифровать без Phantom public key (пустая строка),
-    // чтобы получить decrypted.public_key
+    // Сначала расшифруем без phantom public key, чтобы получить public_key из результата
     let decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
 
     if (!decrypted) {
@@ -141,19 +140,19 @@ async function processCallbackFromUrl() {
       return;
     }
 
-    if (decrypted.public_key) {
-      localStorage.setItem('phantom_user_public_key', decrypted.public_key);
-      setPhantomPublicKey(decrypted.public_key);
-    } else {
-      toast.error('Phantom public key отсутствует в данных');
+    if (!decrypted.public_key) {
+      toast.error('Phantom public key отсутствует в расшифрованных данных');
       clearPhantomStorage();
       window.history.replaceState({}, '', window.location.pathname);
       return;
     }
 
-    // Теперь берём Phantom public key из localStorage
-    const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
+    // Сохраняем публичный ключ Phantom во localStorage и в state
+    localStorage.setItem('phantom_user_public_key', decrypted.public_key);
+    setPhantomPublicKey(decrypted.public_key);
 
+    // Повторно расшифровываем, если нужно
+    const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
     decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
 
     if (!decrypted) {
@@ -182,7 +181,7 @@ async function processCallbackFromUrl() {
       }
     }
 
-    // Здесь добавьте логику для обработки других pendingAction, если нужно
+    // Обработка других pendingAction, если необходимо...
 
     clearPhantomStorage();
     window.history.replaceState({}, '', window.location.pathname);
@@ -193,6 +192,7 @@ async function processCallbackFromUrl() {
     window.history.replaceState({}, '', window.location.pathname);
   }
 }
+
 
 
 
