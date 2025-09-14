@@ -15,7 +15,7 @@ import {
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { generateRandomNonce, encryptPayload, decryptPayload } from '@/utils/phantomEncryption'; // Нужно создать эти утилиты
+import { generateRandomNonce, encryptPayload, decryptPayload } from '@/utils/phantomEncryption';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -65,7 +65,10 @@ export default function RegistrationForm() {
 
     if (errorCode) {
       toast.error(`Phantom error: ${errorMessage || errorCode}`);
-      // Очистить URL
+      // Очистить URL и localStorage
+      localStorage.removeItem('phantom_pending_action');
+      localStorage.removeItem('phantom_registration_data');
+      localStorage.removeItem('phantom_subscription_data');
       window.history.replaceState({}, document.title, window.location.pathname);
       return;
     }
@@ -88,47 +91,92 @@ export default function RegistrationForm() {
   };
 
   // Обработка callback от Phantom
-const handlePhantomCallback = async (nonce: string, encryptedData: string) => {
-  try {
-    // Расшифруйте payload, получите подпись:
-    const result = decryptPayload(
-      encryptedData,
-      nonce,
-      localStorage.getItem('phantom_dapp_public_key')!,
-      localStorage.getItem('phantom_dapp_private_key')!
-    );
-    if (!result || !result.signature) {
-      toast.error('Ошибка расшифровки данных Phantom');
-      return;
+  const handlePhantomCallback = async (nonce: string, encryptedData: string) => {
+    try {
+      // Расшифруйте payload, получите подпись:
+      const result = decryptPayload(
+        encryptedData,
+        nonce,
+        localStorage.getItem('phantom_dapp_public_key')!,
+        localStorage.getItem('phantom_dapp_private_key')!
+      );
+      
+      if (!result || !result.signature) {
+        toast.error('Ошибка расшифровки данных Phantom');
+        return;
+      }
+
+      toast.success('Транзакция успешно подписана в Phantom!');
+
+      const paymentSignature = result.signature;
+      const solanaPublicKey = result.publicKey || phantomPublicKey;
+      const pendingAction = localStorage.getItem('phantom_pending_action');
+
+      if (pendingAction === 'registration') {
+        // Завершаем регистрацию
+        const registrationData = JSON.parse(localStorage.getItem('phantom_registration_data') || '{}');
+        
+        const registerResult = await register(
+          registrationData.nickname,
+          registrationData.email,
+          registrationData.password,
+          registrationData.role,
+          solanaPublicKey,
+          paymentSignature,
+          registrationData.promoCode
+        );
+
+        if (registerResult.success) {
+          toast.success('Registration successful!');
+          router.push('/chat');
+        } else {
+          toast.error(registerResult.error || 'Registration failed');
+        }
+
+        // Очистить сохраненные данные
+        localStorage.removeItem('phantom_pending_action');
+        localStorage.removeItem('phantom_registration_data');
+        
+      } else if (pendingAction === 'subscription') {
+        // Завершаем продление подписки
+        const subscriptionData = JSON.parse(localStorage.getItem('phantom_subscription_data') || '{}');
+        
+        try {
+          const { data } = await axios.post(
+            `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
+            {
+              txSignature: paymentSignature,
+              solanaPublicKey,
+              email: subscriptionData.email,
+            }
+          );
+          
+          toast.success('Subscription successfully renewed!');
+          localStorage.setItem('token', data.token);
+          setUser(data.user);
+          setIsSubscriptionModalOpen(false);
+          router.push('/chat');
+        } catch (err) {
+          toast.error(
+            axios.isAxiosError(err) && err.response?.data?.error
+              ? err.response.data.error
+              : 'Error renewing subscription'
+          );
+        }
+
+        // Очистить сохраненные данные
+        localStorage.removeItem('phantom_pending_action');
+        localStorage.removeItem('phantom_subscription_data');
+      }
+    } catch (e) {
+      toast.error('Ошибка обработки ответа от Phantom');
+      // Очистить сохраненные данные при ошибке
+      localStorage.removeItem('phantom_pending_action');
+      localStorage.removeItem('phantom_registration_data');
+      localStorage.removeItem('phantom_subscription_data');
     }
+  };
 
-    toast.success('Транзакция успешно подписана в Phantom!');
-
-    // После успешной оплаты вызовите регистрацию или продление подписки с signature:
-    const paymentSignature = result.signature;
-
-    // пример: вызов backend с paymentSignature
-    const solanaPublicKey = result.publicKey || phantomPublicKey; // полученный publicKey из callback
-
-    const registerResult = await register(
-      nickname,
-      email,
-      password,
-      role,
-      solanaPublicKey,
-      paymentSignature,
-      promoCode
-    );
-
-    if (registerResult.success) {
-      router.push('/chat');
-    } else {
-      toast.error(registerResult.error || 'Registration failed');
-    }
-  } catch (e) {
-    toast.error('Ошибка обработки ответа от Phantom');
-  }
-};
   // Исправленная функция handlePhantomPayment
   const handlePhantomPayment = async (): Promise<string | null> => {
     const provider = (window as any).solana;
@@ -203,20 +251,21 @@ const handlePhantomCallback = async (nonce: string, encryptedData: string) => {
           transaction: base58Transaction,
           session: phantomSession
         };
-const dappPrivateKeyBase58 = localStorage.getItem('phantom_dapp_private_key');
-if (!dappPrivateKeyBase58) {
-  toast.error('Нет приватного ключа dApp для шифрования.');
-  return null;
-}
-const dappPrivateKeyUint8Array = bs58.decode(dappPrivateKeyBase58);
 
-const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey, phantomPublicKey, dappPrivateKeyUint8Array);
+        const dappPrivateKeyBase58 = localStorage.getItem('phantom_dapp_private_key');
+        if (!dappPrivateKeyBase58) {
+          toast.error('Нет приватного ключа dApp для шифрования.');
+          return null;
+        }
+        const dappPrivateKeyUint8Array = bs58.decode(dappPrivateKeyBase58);
+
+        const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey, phantomPublicKey, dappPrivateKeyUint8Array);
         
         const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappEncryptionPublicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
         
         toast.info("Открываем Phantom для подписания транзакции...");
         window.location.href = deepLink;
-        return null;
+        return null; // Возвращаем null, потому что результат будет в callback
       } catch (error) {
         console.error('Error creating mobile transaction:', error);
         toast.error('Ошибка создания транзакции');
@@ -251,53 +300,57 @@ const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey,
     }
   };
 
-  // Остальной код остается тем же...
+  // Исправленная функция handleRenewSubscription
   const handleRenewSubscription = async () => {
     const provider = (window as any).solana;
-    let solanaPublicKey = null;
-    let signature = null;
 
     if (provider?.isPhantom && !isMobile()) {
-      solanaPublicKey = provider.publicKey?.toBase58();
+      // Десктоп версия
+      const solanaPublicKey = provider.publicKey?.toBase58();
       if (!solanaPublicKey) {
         toast.error('Failed to get Phantom public key');
         return;
       }
-      signature = await handlePhantomPayment();
+      const signature = await handlePhantomPayment();
       if (!signature) return;
+
+      try {
+        const { data } = await axios.post(
+          `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
+          {
+            txSignature: signature,
+            solanaPublicKey,
+            email: loginEmail,
+          }
+        );
+        toast.success('Subscription successfully renewed!');
+        localStorage.setItem('token', data.token);
+        setUser(data.user);
+        setIsSubscriptionModalOpen(false);
+        router.push('/chat');
+      } catch (err) {
+        toast.error(
+          axios.isAxiosError(err) && err.response?.data?.error
+            ? err.response.data.error
+            : 'Error renewing subscription'
+        );
+      }
     } else if (isMobile()) {
+      // Мобильная версия - сохраняем данные и запускаем платеж
+      localStorage.setItem('phantom_pending_action', 'subscription');
+      localStorage.setItem('phantom_subscription_data', JSON.stringify({
+        email: loginEmail
+      }));
+      
       await handlePhantomPayment();
       toast.info("После подписания транзакции в Phantom вернитесь для завершения.");
-      return;
+      return; // Прерываем выполнение, ждем callback
     } else {
       toast.error('Phantom Wallet not found');
       return;
     }
-
-    try {
-      const { data } = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
-        {
-          txSignature: signature,
-          solanaPublicKey,
-          email: loginEmail,
-        }
-      );
-      toast.success('Subscription successfully renewed!');
-      localStorage.setItem('token', data.token);
-      setUser(data.user);
-      setIsSubscriptionModalOpen(false);
-      router.push('/chat');
-    } catch (err) {
-      toast.error(
-        axios.isAxiosError(err) && err.response?.data?.error
-          ? err.response.data.error
-          : 'Error renewing subscription'
-      );
-    }
   };
 
-  // Остальные функции остаются теми же...
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
     setPromoCodeError(null);
@@ -320,6 +373,7 @@ const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey,
     }
   };
 
+  // Исправленная функция handleRegisterSubmit
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -347,6 +401,7 @@ const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey,
     }
 
     try {
+      // Если есть валидный промокод — регистрируем без оплаты
       if (promoCode) {
         const result = await register(nickname, email, password, role, null, null, promoCode);
         setLoading(false);
@@ -359,14 +414,25 @@ const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey,
         return;
       }
 
+      // Для мобильных устройств - сохраняем данные формы и запускаем платеж
+      if (isMobile()) {
+        localStorage.setItem('phantom_pending_action', 'registration');
+        localStorage.setItem('phantom_registration_data', JSON.stringify({
+          nickname,
+          email,
+          password,
+          role,
+          promoCode
+        }));
+        
+        await handlePhantomPayment();
+        setLoading(false);
+        toast.info("Оплата выполняется в приложении Phantom. После завершения оплаты вернитесь сюда для продолжения.");
+        return; // Прерываем выполнение, ждем callback
+      }
+
+      // Десктоп версия - обычный flow
       const paymentSignature = await handlePhantomPayment();
-      
-    if (isMobile()) {
-  setLoading(false);
-  toast.info("Оплата выполняется в приложении Phantom. После завершения оплаты вернитесь сюда для продолжения.");
-  // НЕТ return с ошибкой, а просто прерываем дальнейший код
-  return;
-}
       
       if (!paymentSignature) {
         toast.error('Payment failed');
@@ -396,7 +462,6 @@ const encryptedPayload = encryptPayload(payload, nonce, dappEncryptionPublicKey,
     }
   };
 
-  // Остальные функции и JSX остаются теми же...
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginLoading(true);
