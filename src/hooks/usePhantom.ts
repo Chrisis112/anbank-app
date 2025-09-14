@@ -127,10 +127,9 @@ async function processCallbackFromUrl() {
   try {
     const nonce = decodeURIComponent(nonceParam);
     const data = decodeURIComponent(dataParam);
-
     const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
 
-    // Сначала расшифруем без phantom public key, чтобы получить public_key из результата
+    // Сначала расшифровываем без публичного ключа Phantom, чтобы получить public_key из результата
     let decrypted = decryptPayload(data, nonce, '', dappPrivateKey);
 
     if (!decrypted) {
@@ -147,11 +146,11 @@ async function processCallbackFromUrl() {
       return;
     }
 
-    // Сохраняем публичный ключ Phantom во localStorage и в state
+    // Сохраняем публичный ключ Phantom в localStorage и в состояние
     localStorage.setItem('phantom_user_public_key', decrypted.public_key);
     setPhantomPublicKey(decrypted.public_key);
 
-    // Повторно расшифровываем, если нужно
+    // Повторно расшифровываем с сохраненным публичным ключом
     const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
     decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
 
@@ -172,7 +171,7 @@ async function processCallbackFromUrl() {
 
       const delayedAction = localStorage.getItem('phantom_delayed_action');
       if (delayedAction) {
-        localStorage.removeItem('phantom_delayed_action');
+        localStorage.removeItem('delayedAction');
         setTimeout(() => {
           if (delayedAction === 'registration' || delayedAction === 'subscription') {
             handlePhantomPayment();
@@ -181,7 +180,7 @@ async function processCallbackFromUrl() {
       }
     }
 
-    // Обработка других pendingAction, если необходимо...
+    // Дополнительная логика для других pendingAction...
 
     clearPhantomStorage();
     window.history.replaceState({}, '', window.location.pathname);
