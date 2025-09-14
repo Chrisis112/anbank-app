@@ -43,19 +43,18 @@ export function usePhantom() {
   }, []);
 
   // Генерация ключей dApp
-function generateDappKeys(): DappKeys {
-  const keypair = nacl.box.keyPair();
-  const publicKey = bs58.encode(keypair.publicKey);
-  const privateKey = bs58.encode(keypair.secretKey);  // переименовали secretKey в privateKey
+  function generateDappKeys(): DappKeys {
+    const keypair = nacl.box.keyPair();
+    const publicKey = bs58.encode(keypair.publicKey);
+    const privateKey = bs58.encode(keypair.secretKey);
 
-  localStorage.setItem('phantom_dapp_public_key', publicKey);
-  localStorage.setItem('phantom_dapp_private_key', privateKey);
+    localStorage.setItem('phantom_dapp_public_key', publicKey);
+    localStorage.setItem('phantom_dapp_private_key', privateKey);
 
-  return { publicKey, privateKey };
-}
+    return { publicKey, privateKey };
+  }
 
-
-  // Получение ключей dApp (из состояния или localStorage)
+  // Получение ключей dApp
   function getDappKeys(): DappKeys {
     let publicKey = localStorage.getItem('phantom_dapp_public_key');
     let privateKey = localStorage.getItem('phantom_dapp_private_key');
@@ -69,7 +68,7 @@ function generateDappKeys(): DappKeys {
     return { publicKey, privateKey };
   }
 
-  // Утилита очистки localStorage
+  // Очистка localStorage
   function clearPhantomStorage() {
     localStorage.removeItem('phantom_pending_action');
     localStorage.removeItem('phantom_registration_data');
@@ -106,167 +105,208 @@ function generateDappKeys(): DappKeys {
     }
   }
 
-  // Обработка callback Phantom (вызывать с параметрами из URL)
-async function processCallbackFromUrl() {
-  if (typeof window === 'undefined') return;
+  // Обработка callback Phantom с дополнительным логированием
+  async function processCallbackFromUrl() {
+    if (typeof window === 'undefined') return;
 
-  const params = new URLSearchParams(window.location.search);
-  const nonceParam = params.get('nonce');
-  const dataParam = params.get('data');
-  const errorCode = params.get('errorCode');
-  const errorMessage = params.get('errorMessage');
+    const params = new URLSearchParams(window.location.search);
+    const nonceParam = params.get('nonce');
+    const dataParam = params.get('data');
+    const errorCode = params.get('errorCode');
+    const errorMessage = params.get('errorMessage');
 
-  if (errorCode) {
-    toast.error(`Phantom error: ${errorMessage || errorCode}`);
-    clearPhantomStorage();
-    window.history.replaceState({}, '', window.location.pathname);
-    return;
-  }
-
-  if (!nonceParam || !dataParam) {
-    console.log('Phantom callback missing nonce or data param');
-    return;
-  }
-
-  try {
-    const nonce = decodeURIComponent(nonceParam);
-    const data = decodeURIComponent(dataParam);
-
-    console.log('Phantom callback params:', { nonce: nonce.slice(0, 10) + '...', data: data.slice(0, 10) + '...' });
-
-    const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
-    const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
-
-    console.log('Keys for decryption:', { dappPrivateKey: dappPrivateKey.slice(0, 10) + '...', phantomPublicKeyInStorage: phantomPublicKeyInStorage.slice(0, 10) + '...' });
-
-    const decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
-
-    if (!decrypted) {
-      console.error('Decryption returned null - likely keys mismatch or corrupted data');
-      toast.error('Ошибка расшифровки данных Phantom');
+    if (errorCode) {
+      toast.error(`Phantom error: ${errorMessage || errorCode}`);
       clearPhantomStorage();
       window.history.replaceState({}, '', window.location.pathname);
       return;
     }
 
-    console.log('Decrypted payload:', decrypted);
+    if (!nonceParam || !dataParam) {
+      console.log('Phantom callback missing nonce or data param');
+      return;
+    }
 
-    // остальная логика...
+    try {
+      const nonce = decodeURIComponent(nonceParam);
+      const data = decodeURIComponent(dataParam);
 
-  } catch (error) {
-    console.error('Exception in processCallbackFromUrl:', error);
-    toast.error('Ошибка обработки ответа от Phantom');
-    clearPhantomStorage();
-    window.history.replaceState({}, '', window.location.pathname);
+      console.log('Phantom callback params:', {
+        nonce: nonce.slice(0, 10) + '...',
+        data: data.slice(0, 10) + '...',
+      });
+
+      const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
+      const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
+
+      console.log('Keys for decryption:', {
+        dappPrivateKey: dappPrivateKey.slice(0, 10) + '...',
+        phantomPublicKeyInStorage: phantomPublicKeyInStorage.slice(0, 10) + '...',
+      });
+
+      if (!phantomPublicKeyInStorage) {
+        console.error('Phantom public key missing in localStorage');
+        toast.error('Ошибка: не найден публичный ключ Phantom');
+        clearPhantomStorage();
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+
+      const decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
+
+      if (!decrypted) {
+        console.error('Decryption returned null - likely keys mismatch or corrupted data');
+        toast.error('Ошибка расшифровки данных Phantom');
+        clearPhantomStorage();
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+
+      console.log('Decrypted payload:', decrypted);
+
+      const pendingAction = localStorage.getItem('phantom_pending_action');
+
+      // Здесь можно добавить callback или обработку завершения платежа/регистрации.
+
+      if (pendingAction === 'connect') {
+        if (decrypted.public_key) {
+          const userPublicKey = decrypted.public_key;
+          localStorage.setItem('phantom_user_public_key', userPublicKey);
+          setPhantomPublicKey(userPublicKey);
+          toast.success('Подключено к Phantom Wallet!');
+          localStorage.removeItem('phantom_pending_action');
+
+          const delayedAction = localStorage.getItem('phantom_delayed_action');
+          if (delayedAction) {
+            localStorage.removeItem('phantom_delayed_action');
+            setTimeout(() => {
+              if (delayedAction === 'registration' || delayedAction === 'subscription') {
+                handlePhantomPayment();
+              }
+            }, 1000);
+          }
+        }
+        return;
+      }
+
+      // Логика по обработке транзакции, регистрации, подписки и т.п.
+      // Пока просто очищаем
+      clearPhantomStorage();
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch (error) {
+      console.error('Exception in processCallbackFromUrl:', error);
+      toast.error('Ошибка обработки ответа от Phantom');
+      clearPhantomStorage();
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }
-}
 
-  // Запуск платежа через Phantom Wallet
-async function handlePhantomPayment(): Promise<string | null> {
-  if (isMobile()) {
-    if (!phantomPublicKey) {
-      console.log('Phantom public key missing before mobile connect');
-      await connectPhantomMobile();
-      return null;
-    }
-
-    if (!dappKeys) {
-      toast.error('Ключи dApp не инициализированы');
-      return null;
-    }
-
-    try {
-      const fromPubkey = new PublicKey(phantomPublicKey);
-      const toPubkey = new PublicKey(RECEIVER_WALLET);
-      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
-
-      const connection = new Connection(SOLANA_NETWORK);
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-      );
-
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = fromPubkey;
-
-      const serializedMsg = transaction.serializeMessage();
-      const base58Tx = bs58.encode(serializedMsg);
-
-      const nonce = generateRandomNonce();
-      console.log('Nonce generated for encryption:', nonce);
-
-      const payload = { transaction: base58Tx };
-      console.log('Payload before encryption:', payload);
-
-      const encryptedPayload = encryptPayload(
-        payload,
-        nonce,
-        dappKeys.publicKey,
-        phantomPublicKey,
-        bs58.decode(dappKeys.privateKey)
-      );
-      console.log('Encrypted payload:', encryptedPayload.slice(0, 20) + '...');
-
-      const redirectLink = encodeURIComponent(window.location.origin + window.location.pathname);
-
-      localStorage.setItem('phantom_pending_action', 'transaction');
-
-      const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappKeys.publicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
-
-      toast.info('Перенаправляем в Phantom для подписи транзакции...');
-      window.location.href = deepLink;
-
-      return null;
-    } catch (e) {
-      toast.error('Ошибка создания транзакции');
-      return null;
-    }
-  } else {
-    // Десктопная версия
-    const provider = (window as any).solana;
-    if (!provider || !provider.isPhantom) {
-      toast.error('Phantom Wallet не найден');
-      return null;
-    }
-
-    try {
-      const fromPubkey = provider.publicKey;
-      if (!fromPubkey) {
-        toast.error('Не удалось получить публичный ключ Phantom');
+  // Запуск платежа с поддержкой мобильного и десктопных Phantom
+  async function handlePhantomPayment(): Promise<string | null> {
+    if (isMobile()) {
+      if (!phantomPublicKey) {
+        console.log('Phantom public key missing before mobile connect');
+        await connectPhantomMobile();
         return null;
       }
 
-      const toPubkey = new PublicKey(RECEIVER_WALLET);
-      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+      if (!dappKeys) {
+        toast.error('Ключи dApp не инициализированы');
+        return null;
+      }
 
-      const connection = new Connection(SOLANA_NETWORK);
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-      );
+      try {
+        const fromPubkey = new PublicKey(phantomPublicKey);
+        const toPubkey = new PublicKey(RECEIVER_WALLET);
+        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
 
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = fromPubkey;
+        const connection = new Connection(SOLANA_NETWORK);
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+        );
 
-      // Запрашиваем подпись транзакции у Phantom
-      const signedTransaction = await provider.signTransaction(transaction);
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = fromPubkey;
 
-      // Отправляем подписанную транзакцию в сеть
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+        const serializedMsg = transaction.serializeMessage();
+        const base58Tx = bs58.encode(serializedMsg);
 
-      await connection.confirmTransaction(signature);
+        const nonce = generateRandomNonce();
+        console.log('Nonce generated for encryption:', nonce);
 
-      toast.success('Транзакция успешно подписана и отправлена');
+        const payload = { transaction: base58Tx };
+        console.log('Payload before encryption:', payload);
 
-      return signature;
-    } catch (error) {
-      toast.error('Ошибка проведения транзакции через Phantom');
-      return null;
+        const encryptedPayload = encryptPayload(
+          payload,
+          nonce,
+          dappKeys.publicKey,
+          phantomPublicKey,
+          bs58.decode(dappKeys.privateKey)
+        );
+        console.log('Encrypted payload:', encryptedPayload.slice(0, 20) + '...');
+
+        const redirectLink = encodeURIComponent(window.location.origin + window.location.pathname);
+
+        localStorage.setItem('phantom_pending_action', 'transaction');
+
+        const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappKeys.publicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
+
+        toast.info('Перенаправляем в Phantom для подписи транзакции...');
+        window.location.href = deepLink;
+
+        return null;
+      } catch (e) {
+        toast.error('Ошибка создания транзакции');
+        return null;
+      }
+    } else {
+      // Десктопная версия
+      const provider = (window as any).solana;
+      if (!provider || !provider.isPhantom) {
+        toast.error('Phantom Wallet не найден');
+        return null;
+      }
+
+      try {
+        const fromPubkey = provider.publicKey;
+        if (!fromPubkey) {
+          toast.error('Не удалось получить публичный ключ Phantom');
+          return null;
+        }
+
+        const toPubkey = new PublicKey(RECEIVER_WALLET);
+        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+
+        const connection = new Connection(SOLANA_NETWORK);
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+        );
+
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = fromPubkey;
+
+        // Запрашиваем подпись транзакции у Phantom
+        const signedTransaction = await provider.signTransaction(transaction);
+
+        // Отправляем подписанную транзакцию в сеть
+        const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+
+        await connection.confirmTransaction(signature);
+
+        toast.success('Транзакция успешно подписана и отправлена');
+
+        return signature;
+      } catch (error) {
+        toast.error('Ошибка проведения транзакции через Phantom');
+        return null;
+      }
     }
   }
-}
 
-  // Сбрасываем запросы
+  // Сброс запросов
   function abortRequests() {
     abortControllerRef.current?.abort();
   }
