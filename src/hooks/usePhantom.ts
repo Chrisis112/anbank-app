@@ -107,100 +107,65 @@ function generateDappKeys(): DappKeys {
   }
 
   // Обработка callback Phantom (вызывать с параметрами из URL)
-  async function processCallbackFromUrl() {
-    if (typeof window === 'undefined') return;
+async function processCallbackFromUrl() {
+  if (typeof window === 'undefined') return;
 
-    const params = new URLSearchParams(window.location.search);
-    const nonceParam = params.get('nonce');
-    const dataParam = params.get('data');
-    const errorCode = params.get('errorCode');
-    const errorMessage = params.get('errorMessage');
+  const params = new URLSearchParams(window.location.search);
+  const nonceParam = params.get('nonce');
+  const dataParam = params.get('data');
+  const errorCode = params.get('errorCode');
+  const errorMessage = params.get('errorMessage');
 
-    if (errorCode) {
-      toast.error(`Phantom error: ${errorMessage || errorCode}`);
+  if (errorCode) {
+    toast.error(`Phantom error: ${errorMessage || errorCode}`);
+    clearPhantomStorage();
+    window.history.replaceState({}, '', window.location.pathname);
+    return;
+  }
+
+  if (!nonceParam || !dataParam) {
+    console.log('Phantom callback missing nonce or data param');
+    return;
+  }
+
+  try {
+    const nonce = decodeURIComponent(nonceParam);
+    const data = decodeURIComponent(dataParam);
+
+    console.log('Phantom callback params:', { nonce: nonce.slice(0, 10) + '...', data: data.slice(0, 10) + '...' });
+
+    const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
+    const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
+
+    console.log('Keys for decryption:', { dappPrivateKey: dappPrivateKey.slice(0, 10) + '...', phantomPublicKeyInStorage: phantomPublicKeyInStorage.slice(0, 10) + '...' });
+
+    const decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
+
+    if (!decrypted) {
+      console.error('Decryption returned null - likely keys mismatch or corrupted data');
+      toast.error('Ошибка расшифровки данных Phantom');
       clearPhantomStorage();
       window.history.replaceState({}, '', window.location.pathname);
       return;
     }
 
-    if (!nonceParam || !dataParam) return;
+    console.log('Decrypted payload:', decrypted);
 
-    try {
-      const nonce = decodeURIComponent(nonceParam);
-      const data = decodeURIComponent(dataParam);
+    // остальная логика...
 
-      // Получаем ключи из localStorage
-      const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
-      const phantomPublicKeyInStorage = localStorage.getItem('phantom_user_public_key') || '';
-
-      // Расшифровываем
-      const decrypted = decryptPayload(data, nonce, phantomPublicKeyInStorage, dappPrivateKey);
-
-      if (!decrypted) {
-        toast.error('Ошибка расшифровки данных Phantom');
-        clearPhantomStorage();
-        window.history.replaceState({}, '', window.location.pathname);
-        return;
-      }
-
-      const pendingAction = localStorage.getItem('phantom_pending_action');
-
-      if (pendingAction === 'connect') {
-        if (decrypted.public_key) {
-          const userPublicKey = decrypted.public_key;
-          localStorage.setItem('phantom_user_public_key', userPublicKey);
-          setPhantomPublicKey(userPublicKey);
-          toast.success('Подключено к Phantom Wallet!');
-          localStorage.removeItem('phantom_pending_action');
-
-          const delayedAction = localStorage.getItem('phantom_delayed_action');
-          if (delayedAction) {
-            localStorage.removeItem('phantom_delayed_action');
-            setTimeout(() => {
-              if (delayedAction === 'registration' || delayedAction === 'subscription') {
-                handlePhantomPayment();
-              }
-            }, 1000);
-          }
-        }
-        return;
-      }
-
-      if (
-        pendingAction === 'transaction' ||
-        pendingAction === 'registration' ||
-        pendingAction === 'subscription'
-      ) {
-        const paymentSignature = decrypted.signature;
-        const solanaPublicKey = decrypted.public_key || phantomPublicKeyInStorage;
-
-        if (!paymentSignature) {
-          toast.error('Транзакция не была подписана');
-          return;
-        }
-        toast.success('Оплата подтверждена! Завершаем регистрацию/подписку');
-
-        const actualAction = localStorage.getItem('phantom_actual_action') || pendingAction;
-
-        // Здесь нужно уведомлять родителя (например, через callback или событие) о завершении и передавать данные.
-        // В хуке нет доступа к setUser или router; эту логику следует делать извне.
-
-        // Очистка хранилища здесь только если логика при успешном выполнении завершена
-      }
-
-      clearPhantomStorage();
-      window.history.replaceState({}, '', window.location.pathname);
-    } catch (error) {
-      toast.error('Ошибка обработки ответа от Phantom');
-      clearPhantomStorage();
-      window.history.replaceState({}, '', window.location.pathname);
-    }
+  } catch (error) {
+    console.error('Exception in processCallbackFromUrl:', error);
+    toast.error('Ошибка обработки ответа от Phantom');
+    clearPhantomStorage();
+    window.history.replaceState({}, '', window.location.pathname);
   }
+}
 
   // Запуск платежа через Phantom Wallet
 async function handlePhantomPayment(): Promise<string | null> {
   if (isMobile()) {
     if (!phantomPublicKey) {
+      console.log('Phantom public key missing before mobile connect');
       await connectPhantomMobile();
       return null;
     }
@@ -228,7 +193,10 @@ async function handlePhantomPayment(): Promise<string | null> {
       const base58Tx = bs58.encode(serializedMsg);
 
       const nonce = generateRandomNonce();
+      console.log('Nonce generated for encryption:', nonce);
+
       const payload = { transaction: base58Tx };
+      console.log('Payload before encryption:', payload);
 
       const encryptedPayload = encryptPayload(
         payload,
@@ -237,6 +205,7 @@ async function handlePhantomPayment(): Promise<string | null> {
         phantomPublicKey,
         bs58.decode(dappKeys.privateKey)
       );
+      console.log('Encrypted payload:', encryptedPayload.slice(0, 20) + '...');
 
       const redirectLink = encodeURIComponent(window.location.origin + window.location.pathname);
 

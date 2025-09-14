@@ -46,7 +46,16 @@ export const decryptPayload = (
     const phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
     const dappPrivateKey = bs58.decode(dappPrivateKeyBase58);
 
-    // Расшифровываем используя публичный ключ Phantom и приватный ключ dApp
+    console.log('phantomPublicKey length:', phantomPublicKey.length);
+    console.log('dappPrivateKey length:', dappPrivateKey.length);
+
+    if (phantomPublicKey.length !== 32) {
+      throw new Error(`Phantom public key has invalid length: ${phantomPublicKey.length}`);
+    }
+    if (dappPrivateKey.length !== 32) {
+      throw new Error(`dApp private key has invalid length: ${dappPrivateKey.length}`);
+    }
+
     const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKey, dappPrivateKey);
     if (!decrypted) return null;
 
