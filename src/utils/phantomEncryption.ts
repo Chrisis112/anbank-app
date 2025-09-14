@@ -28,12 +28,11 @@ export const encryptPayload = (
   const phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
   const message = encodeUTF8(JSON.stringify(payload));
 
+  // Шифруем используя публичный ключ Phantom и приватный ключ dApp
   const encrypted = nacl.box(message, nonce, phantomPublicKey, dappPrivateKeyUint8Array);
 
   return bs58.encode(encrypted);
 };
-
-
 
 export const decryptPayload = (
   encryptedBase58: string,
@@ -47,12 +46,14 @@ export const decryptPayload = (
     const phantomPublicKey = bs58.decode(phantomPublicKeyBase58);
     const dappPrivateKey = bs58.decode(dappPrivateKeyBase58);
 
+    // Расшифровываем используя публичный ключ Phantom и приватный ключ dApp
     const decrypted = nacl.box.open(encrypted, nonce, phantomPublicKey, dappPrivateKey);
     if (!decrypted) return null;
 
     const jsonStr = decodeUTF8(decrypted);
     return JSON.parse(jsonStr);
-  } catch {
+  } catch (error) {
+    console.error('Decryption error:', error);
     return null;
   }
 };

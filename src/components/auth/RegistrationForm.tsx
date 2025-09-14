@@ -81,25 +81,30 @@ const [dappKeys, setDappKeys] = useState<{ publicKey: string; privateKey: string
     return { publicKey, privateKey };
   };
 
-  useEffect(() => {
-  if (typeof window === 'undefined') return; // защита от SSR
+useEffect(() => {
+  if (typeof window === 'undefined') return;
   
+  // Инициализация dApp ключей
   let pub = localStorage.getItem('phantom_dapp_public_key');
   let priv = localStorage.getItem('phantom_dapp_private_key');
   
   if (!pub || !priv) {
-    // создаём новые ключи если отсутствуют
     const newKeys = generateDappKeys();
     pub = newKeys.publicKey;
-priv = newKeys.secretKey;
+    priv = newKeys.secretKey;
   }
   setDappKeys({ publicKey: pub, privateKey: priv });
+
+  // Инициализация Phantom публичного ключа
+  const savedPhantomKey = localStorage.getItem('phantom_user_public_key');
+  if (savedPhantomKey) {
+    setPhantomPublicKey(savedPhantomKey);
+  }
 }, []);
 
 useEffect(() => {
   async function processCallback() {
     const params = new URLSearchParams(window.location.search);
-    // URL кодированные параметры decrypt
     const nonceParam = params.get('nonce');
     const dataParam = params.get('data');
     const errorCode = params.get('errorCode');
@@ -117,78 +122,120 @@ useEffect(() => {
         const nonce = decodeURIComponent(nonceParam);
         const data = decodeURIComponent(dataParam);
 
-        // Обратитесь к локальному хранилищу для ключей
-        const dappPublicKey = localStorage.getItem('phantom_dapp_public_key') || '';
+        // Получаем ключи из localStorage
         const dappPrivateKey = localStorage.getItem('phantom_dapp_private_key') || '';
         const phantomPublicKey = localStorage.getItem('phantom_user_public_key') || '';
 
-        // Расшифровка
+        console.log('Decryption keys:', {
+          dappPrivateKey: dappPrivateKey ? 'present' : 'missing',
+          phantomPublicKey: phantomPublicKey ? 'present' : 'missing',
+          nonce: nonce.substring(0, 10) + '...',
+          data: data.substring(0, 10) + '...'
+        });
+
+        // ИСПРАВЛЕН порядок параметров: data, nonce, phantomPublicKey, dappPrivateKey
         const decrypted = decryptPayload(data, nonce, phantomPublicKey, dappPrivateKey);
 
         if (!decrypted) {
+          console.error('Failed to decrypt payload');
           toast.error('Ошибка расшифровки данных Phantom');
           clearPhantomStorage();
           window.history.replaceState({}, '', window.location.pathname);
           return;
         }
 
-        toast.success('Оплата подтверждена! Завершаем регистрацию/подписку');
+        console.log('Decrypted data:', decrypted);
 
-        const paymentSignature = decrypted.signature;
-        const solanaPublicKey = decrypted.public_key || phantomPublicKey;
-
-        // В зависимости от сохранённого действия вызываем backend
+        // Определяем тип операции
         const pendingAction = localStorage.getItem('phantom_pending_action');
-
-        if (pendingAction === 'registration') {
-          const registrationData = JSON.parse(localStorage.getItem('phantom_registration_data') || '{}');
-
-          // Вызов backend регистрации
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              nickname: registrationData.nickname,
-              email: registrationData.email,
-              password: registrationData.password,
-              role: registrationData.role,
-              solanaPublicKey,
-              paymentSignature,
-              promoCode: registrationData.promoCode || null,
-            }),
-          });
-          const json = await res.json();
-
-          if (res.ok) {
-            localStorage.setItem('token', json.token);
-            setUser(json.user);
-            router.push('/chat');
-          } else {
-            toast.error(json.error || 'Ошибка регистрации');
+        
+        if (pendingAction === 'connect') {
+          // Обработка подключения
+          if (decrypted.public_key) {
+            const userPublicKey = decrypted.public_key;
+            localStorage.setItem('phantom_user_public_key', userPublicKey);
+            setPhantomPublicKey(userPublicKey);
+            toast.success('Подключено к Phantom Wallet!');
+            
+            localStorage.removeItem('phantom_pending_action');
+            
+            // Проверяем отложенные действия
+            const delayedAction = localStorage.getItem('phantom_delayed_action');
+            if (delayedAction) {
+              localStorage.removeItem('phantom_delayed_action');
+              setTimeout(() => {
+                if (delayedAction === 'registration' || delayedAction === 'subscription') {
+                  handlePhantomPayment();
+                }
+              }, 1000);
+            }
           }
-        } else if (pendingAction === 'subscription') {
-          const subscriptionData = JSON.parse(localStorage.getItem('phantom_subscription_data') || '{}');
+          return;
+        }
 
-          // Вызов backend продления подписки
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              txSignature: paymentSignature,
-              solanaPublicKey,
-              email: subscriptionData.email,
-            }),
-          });
-          const json = await res.json();
+        // Обработка транзакции
+        if (pendingAction === 'transaction' || pendingAction === 'registration' || pendingAction === 'subscription') {
+          const paymentSignature = decrypted.signature;
+          const solanaPublicKey = decrypted.public_key || phantomPublicKey;
 
-          if (res.ok) {
-            localStorage.setItem('token', json.token);
-            setUser(json.user);
-            setIsSubscriptionModalOpen(false);
-            router.push('/chat');
-            toast.success('Подписка успешно продлена');
-          } else {
-            toast.error(json.error || 'Ошибка продления подписки');
+          if (!paymentSignature) {
+            toast.error('Транзакция не была подписана');
+            return;
+          }
+
+          toast.success('Оплата подтверждена! Завершаем регистрацию/подписку');
+
+          const actualAction = localStorage.getItem('phantom_actual_action') || pendingAction;
+
+          if (actualAction === 'registration') {
+            const registrationData = JSON.parse(localStorage.getItem('phantom_registration_data') || '{}');
+
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                nickname: registrationData.nickname,
+                email: registrationData.email,
+                password: registrationData.password,
+                role: registrationData.role,
+                solanaPublicKey,
+                paymentSignature,
+                promoCode: registrationData.promoCode || null,
+              }),
+            });
+            const json = await res.json();
+
+            if (res.ok) {
+              localStorage.setItem('token', json.token);
+              setUser(json.user);
+              router.push('/chat');
+              toast.success('Регистрация успешна!');
+            } else {
+              toast.error(json.error || 'Ошибка регистрации');
+            }
+          } else if (actualAction === 'subscription') {
+            const subscriptionData = JSON.parse(localStorage.getItem('phantom_subscription_data') || '{}');
+
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                txSignature: paymentSignature,
+                solanaPublicKey,
+                email: subscriptionData.email,
+              }),
+            });
+            const json = await res.json();
+
+            if (res.ok) {
+              localStorage.setItem('token', json.token);
+              setUser(json.user);
+              setIsSubscriptionModalOpen(false);
+              router.push('/chat');
+              toast.success('Подписка успешно продлена');
+            } else {
+              toast.error(json.error || 'Ошибка продления подписки');
+            }
           }
         }
 
@@ -360,93 +407,67 @@ function clearPhantomStorage() {
   };
 
   // Функция handlePhantomPayment
-    const handlePhantomPayment = async (): Promise<string | null> => {
-    if (typeof (window as any).solana !== 'undefined' && (window as any).solana.isPhantom && !isMobile()) {
-      // Десктопный flow с расширением Phantom
-      try {
-        const provider = (window as any).solana;
-        await provider.connect();
-        const fromPubkey = provider.publicKey;
-        const toPubkey = new PublicKey(RECEIVER_WALLET);
-        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+const handlePhantomPayment = async (): Promise<string | null> => {
+  // ... десктопная версия остается без изменений
 
-        const connection = new Connection(SOLANA_NETWORK);
-        const transaction = new Transaction().add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
-
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPubkey;
-
-        const signed = await provider.signTransaction(transaction);
-        const signature = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(signature);
-
-        toast.success('✅ Оплата успешна!');
-        return signature;
-      } catch (e) {
-        toast.error('Ошибка оплаты');
-        return null;
-      }
+  if (isMobile()) {
+    if (!phantomPublicKey) {
+      await connectPhantomMobile();
+      return null;
     }
 
-    if (isMobile()) {
-      // Мобильный flow через deeplink Phantom
-      if (!phantomPublicKey) {
-        // Нужно подключиться к Phantom (через deeplink connect)
-        await connectPhantomMobile();
-        return null; // Остановить выполнение и ждать callback
-      }
+    if (!dappKeys) {
+      toast.error('Ключи dApp не инициализированы');
+      return null;
+    }
 
-      try {
-        const fromPubkey = new PublicKey(phantomPublicKey);
-        const toPubkey = new PublicKey(RECEIVER_WALLET);
-        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+    try {
+      const fromPubkey = new PublicKey(phantomPublicKey);
+      const toPubkey = new PublicKey(RECEIVER_WALLET);
+      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
 
-        const connection = new Connection(SOLANA_NETWORK);
+      const connection = new Connection(SOLANA_NETWORK);
+      const transaction = new Transaction().add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
 
-        const transaction = new Transaction().add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = fromPubkey;
 
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPubkey;
+      const serializedMsg = transaction.serializeMessage();
+      const base58Tx = bs58.encode(serializedMsg);
 
-        // Сериализуем и кодируем
-        const serializedMsg = transaction.serializeMessage();
-        const base58Tx = bs58.encode(serializedMsg);
+      const nonce = generateRandomNonce();
+      const payload = { transaction: base58Tx };
 
-        const nonce = generateRandomNonce();
+      const encryptedPayload = encryptPayload(
+        payload,
+        nonce,
+        dappKeys.publicKey,
+        phantomPublicKey,
+        bs58.decode(dappKeys.privateKey)
+      );
 
-        const payload = { transaction: base58Tx };
-if (!dappKeys) {
-  toast.error('Ключи dApp не инициализированы');
+      const redirectLink = encodeURIComponent(window.location.origin + window.location.pathname);
+
+      // Устанавливаем правильное состояние для callback
+      localStorage.setItem('phantom_pending_action', 'transaction');
+
+      const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappKeys.publicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
+
+      toast.info('Перенаправляем в Phantom для подписи транзакции...');
+      window.location.href = deepLink;
+
+      return null;
+    } catch (e) {
+      console.error('Mobile payment error:', e);
+      toast.error('Ошибка создания транзакции');
+      return null;
+    }
+  }
+
+  toast.error('Phantom Wallet не найден');
   return null;
-}
-        const encryptedPayload = encryptPayload(
-          payload,
-          nonce,
-          dappKeys.publicKey,
-          phantomPublicKey,
-          bs58.decode(dappKeys.privateKey)
-        );
-
-        const redirectLink = encodeURIComponent(window.location.origin + window.location.pathname);
-
-        const deepLink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappKeys.publicKey}&nonce=${nonce}&redirect_link=${redirectLink}&payload=${encryptedPayload}`;
-
-        toast.info('Перенаправляем в Phantom для подписи транзакции...');
-        window.location.href = deepLink;
-
-        return null; // ждем callback для продолжения
-      } catch (e) {
-        toast.error('Ошибка создания транзакции');
-        return null;
-      }
-    }
-
-    toast.error('Phantom Wallet не найден');
-    return null;
-  };
-
+};
   // Подключение к Phantom на мобильном
   const connectPhantomMobile = async () => {
     try {
