@@ -172,6 +172,29 @@ useEffect(() => {
     handleWalletConnected(phantom.phantomPublicKey);
   }
 }, [phantom.phantomPublicKey]);
+// При изменении ключа в phantom обновляем локальный стейт и localStorage
+useEffect(() => {
+  if (phantom.phantomPublicKey) {
+    setPhantomPublicKey(phantom.phantomPublicKey);
+    localStorage.setItem('phantom_user_public_key', phantom.phantomPublicKey);
+    setIsMobileWalletConnected(true);
+  } else {
+    setPhantomPublicKey(null);
+    setIsMobileWalletConnected(false);
+    localStorage.removeItem('phantom_user_public_key');
+  }
+}, [phantom.phantomPublicKey]);
+useEffect(() => {
+  const savedKey = localStorage.getItem('phantom_user_public_key');
+  if (savedKey && !phantom.phantomPublicKey) {
+    setPhantomPublicKey(savedKey);
+    setIsMobileWalletConnected(true);
+    // Можно попробовать вызвать функцию подключения кошелька из usePhantomPayment, 
+    // чтобы обновить состояние phantom.phantomPublicKey
+    phantom.connectWallet?.();
+  }
+}, []);
+
 
 // При монтировании компонента (в useEffect)
 useEffect(() => {
