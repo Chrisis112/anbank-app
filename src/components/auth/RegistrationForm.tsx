@@ -175,7 +175,9 @@ useEffect(() => {
 
 // При монтировании компонента (в useEffect)
 useEffect(() => {
+  toast.info(`phantomPublicKey on load: ${phantom.phantomPublicKey ?? 'null or undefined'}`);
   const savedKey = localStorage.getItem('phantom_user_public_key');
+  toast.info(`savedKey from localStorage: ${savedKey ?? 'null or undefined'}`);
   if (savedKey) {
     setPhantomPublicKey(savedKey);
     setIsMobileWalletConnected(true);
