@@ -255,23 +255,16 @@ const resetPaymentStatus = useCallback(() => {
   }, []);
 
   // Connect wallet (for desktop and mobile)
-  const connectWallet = useCallback(async () => {
-    try {
-      if (!phantomPublicKey) {
-        const keys = getDappKeys();
-        setDappKeys(keys);
-        localStorage.setItem('phantom_dapp_pending_action', 'connect');
-        const redirectUrl = encodeURIComponent(window.location.href);
-        const deepLink = `https://phantom.app/ul/v1/connect?app_url=${redirectUrl}&dapp_encryption_public_key=${keys.publicKey}&redirect_url=${redirectUrl}&cluster=mainnet-beta`;
-        window.location.href = deepLink;
-        return false;
-      }
-      return true;
-    } catch (error) {
-      toast.error('Не удалось подключиться к кошельку');
-      return false;
-    }
-  }, [phantomPublicKey]);
+const connectWallet = useCallback(async (): Promise<boolean> => {
+  try {
+    await connect();
+    return true;
+  } catch (error) {
+    toast.error('Failed to connect wallet: ' + (error as Error).message);
+    return false;
+  }
+}, [connect]);
+
 
   // Payment processing function (handles desktop & mobile)
   const processPayment = useCallback(async (amountToSend?: number) => {
@@ -359,9 +352,9 @@ const resetPaymentStatus = useCallback(() => {
   }, [phantomPublicKey, dappKeys]);
 
 return {
-  connectWallet: connect,
   disconnectWallet: () => disconnect(),
   processPayment,
+  connectWallet,
   resetPaymentStatus,
   paymentStatus,
   phantomPublicKey,
