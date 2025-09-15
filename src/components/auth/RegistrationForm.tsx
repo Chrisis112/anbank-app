@@ -149,10 +149,20 @@ export default function RegistrationForm() {
           toast.info('Please connect Phantom and then retry registration');
           return;
         
-        }        setRegisterLoading(false);
+        } else {
+          const signature = await phantom.processPayment();
+          if (!signature) {
+            toast.error('Payment failed');
+            setRegisterLoading(false);
+            return;
+          }
+        }
+
+        setRegisterLoading(false);
         toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
         return;
       }
+
       // Desktop flow
       if (!phantom.isConnected) {
         if (!phantom.publicKey) {
