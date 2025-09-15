@@ -18,7 +18,7 @@ type Role = 'newbie' | 'advertiser' | 'creator';
 
 export default function RegistrationForm() {
   const router = useRouter();
-  const register = useAuthStore((state) => state.register);
+  const register = useAuthStore(state => state.register);
   const { setUser } = useUserStore();
 
   const phantom = usePhantomPayment();
@@ -104,21 +104,25 @@ export default function RegistrationForm() {
         return;
       }
 
+      // Mobile flow
       if (isMobile) {
         localStorage.setItem('phantom_actual_action', 'registration');
-        localStorage.setItem('phantom_registration_data', JSON.stringify({
-          nickname: data.nickname,
-          email: data.email,
-          password: data.password,
-          role: data.role,
-          promoCode: data.promoCode,
-        }));
+        localStorage.setItem(
+          'phantom_registration_data',
+          JSON.stringify({
+            nickname: data.nickname,
+            email: data.email,
+            password: data.password,
+            role: data.role,
+            promoCode: data.promoCode,
+          }),
+        );
 
         if (!phantom.publicKey) {
           localStorage.setItem('phantom_delayed_action', 'registration');
           walletModal.setVisible(true);
           setRegisterLoading(false);
-          toast.info('Пожалуйста, подключите Phantom и повторите регистрацию');
+          toast.info('Please connect Phantom and then retry registration');
           return;
         } else {
           const signature = await phantom.processPayment();
@@ -130,12 +134,13 @@ export default function RegistrationForm() {
         }
 
         setRegisterLoading(false);
-        toast.info('Оплата выполняется в приложении Phantom. После завершения оплаты вернитесь сюда для продолжения.');
+        toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
         return;
       }
 
+      // Desktop flow
       if (!phantom.isConnected) {
-        if (!phantom.wallet) {
+        if (!phantom.publicKey) {
           walletModal.setVisible(true);
           setRegisterLoading(false);
           return;
@@ -269,7 +274,7 @@ export default function RegistrationForm() {
         await phantom.processPayment();
       }
 
-      toast.info('После подписания транзакции в Phantom вернитесь для завершения.');
+      toast.info('After signing the transaction in Phantom, return here to complete.');
       return;
     } else {
       toast.error('Phantom Wallet not found');
