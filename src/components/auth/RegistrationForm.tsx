@@ -161,6 +161,27 @@ export default function RegistrationForm() {
           }),
         );
 
+        const handleWalletConnected = (publicKey: string) => {
+  setPhantomPublicKey(publicKey);
+  localStorage.setItem('phantom_user_public_key', publicKey);
+  setIsMobileWalletConnected(true);
+};
+
+useEffect(() => {
+  if (phantom.phantomPublicKey) {
+    handleWalletConnected(phantom.phantomPublicKey);
+  }
+}, [phantom.phantomPublicKey]);
+
+// При монтировании компонента (в useEffect)
+useEffect(() => {
+  const savedKey = localStorage.getItem('phantom_user_public_key');
+  if (savedKey) {
+    setPhantomPublicKey(savedKey);
+    setIsMobileWalletConnected(true);
+  }
+}, []);
+
         const paymentSuccess = await phantom.processPayment();
         if (!paymentSuccess) {
           toast.error('Payment failed');
