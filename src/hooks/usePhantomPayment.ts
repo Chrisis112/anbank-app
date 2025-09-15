@@ -136,7 +136,6 @@ const processPayment = useCallback(async (customAmount?: number): Promise<boolea
 
     const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
-    // Создаём транзакцию
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: publicKey,
@@ -145,26 +144,17 @@ const processPayment = useCallback(async (customAmount?: number): Promise<boolea
       })
     );
 
-    // Получаем актуальный blockhash перед отправкой транзакции
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-
-    // Обновляем транзакцию с новыми данными
     transaction.recentBlockhash = blockhash;
     transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = publicKey;
 
-    // Печатаем для дебага
-    console.log("Blockhash:", blockhash);
-    console.log("Last valid block height:", lastValidBlockHeight);
-    console.log("Transaction before sending:", transaction);
+    const signature = await sendTransaction(transaction, connection, {
+      preflightCommitment: 'processed',
+    });
 
-    // Отправляем транзакцию с подписанием через wallet
-    const signature = await sendTransaction(transaction, connection);
-
-    // Обновляем статус на подтверждение
     setPaymentStatus({ signature, confirmed: false, error: null });
 
-    // Ждём подтверждения транзакции
     await connection.confirmTransaction(
       {
         signature,
@@ -180,12 +170,7 @@ const processPayment = useCallback(async (customAmount?: number): Promise<boolea
 
     return true;
   } catch (error: any) {
-    // Обрабатываем ошибку
-    setPaymentStatus({
-      signature: null,
-      confirmed: false,
-      error: error?.message || 'Payment failed',
-    });
+    setPaymentStatus({ signature: null, confirmed: false, error: error?.message || 'Payment failed' });
     console.error('Payment failed:', error);
     return false;
   } finally {
