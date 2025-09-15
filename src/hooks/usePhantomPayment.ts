@@ -136,37 +136,32 @@ const processPayment = useCallback(async (customAmount?: number): Promise<boolea
 
     const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
-const transaction = new Transaction().add(
-  SystemProgram.transfer({
-    fromPubkey: publicKey,
-    toPubkey: receiverPublicKey,
-    lamports: Math.floor(lamports),
-  }),
-);
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: publicKey,
+        toPubkey: receiverPublicKey,
+        lamports: Math.floor(lamports),
+      })
+    );
 
-const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-transaction.recentBlockhash = blockhash;
-transaction.lastValidBlockHeight = lastValidBlockHeight;
-transaction.feePayer = publicKey;
+    // ✅ Не устанавливаем вручную recentBlockhash и feePayer
 
-const latestBlockhash = await connection.getLatestBlockhash();
-
-transaction.recentBlockhash = latestBlockhash.blockhash;
-transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
-transaction.feePayer = publicKey!;
-    // Просто вызываем sendTransaction, адаптер под капотом вызовет подпись и отправку
     const signature = await sendTransaction(transaction, connection);
 
     setPaymentStatus({ signature, confirmed: false, error: null });
 
-await connection.confirmTransaction(
-  {
-    signature: signature,
-    blockhash: latestBlockhash.blockhash,
-    lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-  },
-  'confirmed',
-);
+    // ✅ Получаем блокхеш, чтобы подтвердить транзакцию
+    const latestBlockhash = await connection.getLatestBlockhash();
+
+    await connection.confirmTransaction(
+      {
+        signature: signature,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      },
+      'confirmed',
+    );
+
     setPaymentStatus({ signature, confirmed: true, error: null });
 
     console.log(`Payment successful! Signature: ${signature}`);
