@@ -1,48 +1,58 @@
-"use client";
+// components/WalletProviders.tsx
+import React, { FC, ReactNode, useMemo } from 'react';
+import {
+  ConnectionProvider,
+  WalletProvider,
+} from '@solana/wallet-adapter-react';
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import {
+  PhantomWalletAdapter,
+  SolflareWalletAdapter,
+  TorusWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
+import { clusterApiUrl } from '@solana/web3.js';
 
-import React, { useMemo } from "react";
-import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
-import { PhantomWalletAdapter, SolflareWalletAdapter } from "@solana/wallet-adapter-wallets";
-import { clusterApiUrl } from "@solana/web3.js";
+// Default styles for wallet modal
+require('@solana/wallet-adapter-react-ui/styles.css');
 
-// ❗ Для стилей кошелька
-import "@solana/wallet-adapter-react-ui/styles.css";
+const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
 
-type Props = {
-  children: React.ReactNode;
-};
+interface WalletProvidersProps {
+  children: ReactNode;
+}
 
-
-// Основной провайдер кошельков Solana
-export default function WalletProvider({ children }: Props) {
-  // ⚙️ Сеть: "devnet" для теста, "mainnet-beta" для продакшена
-const network: WalletAdapterNetwork =
-  (process.env.NEXT_PUBLIC_SOLANA_NETWORK as WalletAdapterNetwork) || WalletAdapterNetwork.Devnet;
-
-  // RPC endpoint
+export const WalletProviders: FC<WalletProvidersProps> = ({ children }) => {
+  // Determine network endpoint
   const endpoint = useMemo(() => {
-    return network === "mainnet-beta"
-      ? clusterApiUrl("mainnet-beta")
-      : clusterApiUrl("devnet");
-  }, [network]);
+    if (SOLANA_NETWORK.includes('mainnet')) {
+      return clusterApiUrl('mainnet-beta');
+    } else if (SOLANA_NETWORK.includes('testnet')) {
+      return clusterApiUrl('testnet');
+    } else if (SOLANA_NETWORK.includes('devnet')) {
+      return clusterApiUrl('devnet');
+    }
+    return SOLANA_NETWORK;
+  }, []);
 
-  // Список поддерживаемых кошельков
+  // Initialize wallet adapters
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
-      new SolflareWalletAdapter({ network })
-      // сюда можно добавить ещё кошельки
+      new SolflareWalletAdapter(),
+      new TorusWalletAdapter(),
     ],
-    [network]
+    []
   );
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <SolanaWalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
-      </SolanaWalletProvider>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>
+          {children}
+        </WalletModalProvider>
+      </WalletProvider>
     </ConnectionProvider>
   );
-}
+};
+
+export default WalletProviders;
