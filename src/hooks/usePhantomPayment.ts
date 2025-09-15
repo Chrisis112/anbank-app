@@ -68,13 +68,12 @@ export const usePhantomPayment = (): PaymentHookReturn => {
 
     checkPhantomInstalled();
 
-    // Re-check when wallet adapter updates
     if (wallet) {
       setIsPhantomInstalled(true);
     }
   }, [wallet]);
 
-  // Connect wallet function with cross-platform support
+  // Connect wallet function
   const connectWallet = useCallback(async (): Promise<boolean> => {
     if (!wallet) {
       setPaymentStatus((prev) => ({
@@ -119,7 +118,7 @@ export const usePhantomPayment = (): PaymentHookReturn => {
     }
   }, [publicKey, connection]);
 
-  // Process payment with comprehensive error handling
+  // Process payment with complete handling
   const processPayment = useCallback(async (customAmount?: number): Promise<boolean> => {
     if (!connected || !publicKey || !sendTransaction) {
       setPaymentStatus({
@@ -148,28 +147,15 @@ export const usePhantomPayment = (): PaymentHookReturn => {
 
     try {
       const amount = customAmount || SOL_AMOUNT;
+      if (amount <= 0) throw new Error('Invalid payment amount');
+
       const lamports = amount * LAMPORTS_PER_SOL;
 
-      // Validate amount
-      if (amount <= 0) {
-        throw new Error('Invalid payment amount');
-      }
-
-      // Check if user has sufficient balance
       const balance = await getBalance();
-      if (balance !== null && balance < amount + 0.001) {
-        throw new Error('Insufficient balance for transaction');
-      }
+      if (balance !== null && balance < amount + 0.001) throw new Error('Insufficient balance for transaction');
 
-      // Create receiver public key
-      let receiverPublicKey: PublicKey;
-      try {
-        receiverPublicKey = new PublicKey(RECEIVER_WALLET);
-      } catch {
-        throw new Error('Invalid receiver wallet address');
-      }
+      const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
-      // Create transaction
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: publicKey,
@@ -178,13 +164,10 @@ export const usePhantomPayment = (): PaymentHookReturn => {
         }),
       );
 
-      // Fetch recent blockhash and set fee payer
       const { blockhash } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
-      // Send transaction
-      console.log(`Sending ${amount} SOL to ${RECEIVER_WALLET}...`);
       const signature = await sendTransaction(transaction, connection);
 
       setPaymentStatus({
@@ -193,8 +176,6 @@ export const usePhantomPayment = (): PaymentHookReturn => {
         error: null,
       });
 
-      // Confirm transaction
-      console.log('Transaction sent, waiting for confirmation...');
       await connection.confirmTransaction(signature, 'confirmed');
 
       setPaymentStatus({
@@ -221,7 +202,7 @@ export const usePhantomPayment = (): PaymentHookReturn => {
     }
   }, [connected, publicKey, sendTransaction, connection, getBalance]);
 
-  // Reset payment status
+  // Reset payment status helper
   const resetPaymentStatus = useCallback(() => {
     setPaymentStatus({
       signature: null,
