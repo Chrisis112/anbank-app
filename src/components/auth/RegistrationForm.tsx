@@ -17,6 +17,7 @@ import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import nacl from 'tweetnacl';
+import PhantomWalletConnector from '@/hooks/PhantomWalletConnector';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -547,7 +548,7 @@ useEffect(() => {
           <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
             CryptoChat
           </h1>
-
+<PhantomWalletConnector />
           {/* Tab Switcher */}
           <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
             <button
@@ -582,6 +583,7 @@ useEffect(() => {
               {/* Mobile Wallet Connection Button */}
               {isMobile && (
                 <div className="mb-4">
+                  <PhantomWalletConnector />
                   <button
                     onClick={handleConnectPhantomWallet}
                     disabled={isConnectingWallet || isMobileWalletConnected}
