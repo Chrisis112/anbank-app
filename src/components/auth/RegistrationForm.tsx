@@ -51,6 +51,30 @@ export default function RegistrationForm() {
     setPromoCodeError(message);
   };
 
+    useEffect(() => {
+    async function autoPayOnMobile() {
+      if (isMobile && phantom.publicKey && registerLoading === false) {
+        setRegisterLoading(true);
+        try {
+          const signature = await phantom.processPayment();
+          if (!signature) {
+            toast.error('Payment failed');
+            setRegisterLoading(false);
+            return;
+          }
+          toast.info('Payment succeeded! Please continue registration.');
+          // Здесь можно дополнительно автоматически вызвать регистрацию,
+          // если все данные формы уже готовы
+        } catch (error) {
+          toast.error('Payment failed');
+        } finally {
+          setRegisterLoading(false);
+        }
+      }
+    }
+    autoPayOnMobile();
+  }, [phantom.publicKey, isMobile, phantom, registerLoading]);
+
   const handleRegisterSubmit = async (data: {
     nickname: string;
     email: string;
@@ -106,7 +130,7 @@ export default function RegistrationForm() {
       }
 
       // Mobile flow
-      if (isMobile) {
+    if (isMobile) {
         localStorage.setItem('phantom_actual_action', 'registration');
         localStorage.setItem(
           'phantom_registration_data',
@@ -118,27 +142,17 @@ export default function RegistrationForm() {
             promoCode: data.promoCode,
           }),
         );
-
         if (!phantom.publicKey) {
           localStorage.setItem('phantom_delayed_action', 'registration');
           walletModal.setVisible(true);
           setRegisterLoading(false);
           toast.info('Please connect Phantom and then retry registration');
           return;
-        } else {
-          const signature = await phantom.processPayment();
-          if (!signature) {
-            toast.error('Payment failed');
-            setRegisterLoading(false);
-            return;
-          }
-        }
-
-        setRegisterLoading(false);
+        
+        }        setRegisterLoading(false);
         toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
         return;
       }
-
       // Desktop flow
       if (!phantom.isConnected) {
         if (!phantom.publicKey) {
@@ -148,6 +162,8 @@ export default function RegistrationForm() {
         }
         await phantom.connectWallet();
       }
+
+      
 
       const paymentSuccess = await phantom.processPayment();
       if (!paymentSuccess) {
