@@ -2,7 +2,7 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Connection } from '@solana/web3.js';
 import { useState, useCallback, useEffect } from 'react';
 
-// Environment variables
+// Environment config
 const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
 const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.36');
@@ -24,14 +24,14 @@ interface PaymentHookReturn {
 
   connectWallet: () => Promise<boolean>;
   disconnectWallet: () => Promise<void>;
-  processPayment: (customAmount?: number) => Promise<boolean>;
+  processPayment: (customAmount?: number) => Promise<string | null>;
   resetPaymentStatus: () => void;
 
   getBalance: () => Promise<number | null>;
   isPhantomInstalled: boolean;
 }
 
-// Direct payment method bypassing wallet adapter, used only on some mobile cases
+// Direct Phantom connection payment, bypassing wallet adapter (use on mobile if needed)
 async function processPaymentDirectly(
   transaction: Transaction,
   connection: Connection,
@@ -45,8 +45,8 @@ async function processPaymentDirectly(
     await provider.connect();
   }
 
-  // Set recent blockhash and fee payer before signing
   const latestBlockhash = await connection.getLatestBlockhash();
+
   transaction.recentBlockhash = latestBlockhash.blockhash;
   transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
   transaction.feePayer = publicKey;
@@ -68,10 +68,17 @@ async function processPaymentDirectly(
   return signature;
 }
 
-// Main hook
 export const usePhantomPayment = (): PaymentHookReturn => {
   const { connection } = useConnection();
-  const { wallet, publicKey, connected, connecting, connect, disconnect, sendTransaction } = useWallet();
+  const {
+    wallet,
+    publicKey,
+    connected,
+    connecting,
+    connect,
+    disconnect,
+    sendTransaction,
+  } = useWallet();
 
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({
@@ -132,31 +139,19 @@ export const usePhantomPayment = (): PaymentHookReturn => {
   }, [publicKey, connection]);
 
   const processPayment = useCallback(
-    async (customAmount?: number): Promise<boolean> => {
-      if (!connected || !publicKey || !sendTransaction) {
-        setPaymentStatus({
-          signature: null,
-          confirmed: false,
-          error: 'Wallet not connected',
-        });
-        return false;
+    async (customAmount?: number): Promise<string | null> => {
+      if (!connected || !publicKey) {
+        setPaymentStatus({ signature: null, confirmed: false, error: 'Wallet not connected' });
+        return null;
       }
 
       if (!RECEIVER_WALLET) {
-        setPaymentStatus({
-          signature: null,
-          confirmed: false,
-          error: 'Receiver wallet not configured',
-        });
-        return false;
+        setPaymentStatus({ signature: null, confirmed: false, error: 'Receiver wallet not configured' });
+        return null;
       }
 
       setIsProcessingPayment(true);
-      setPaymentStatus({
-        signature: null,
-        confirmed: false,
-        error: null,
-      });
+      setPaymentStatus({ signature: null, confirmed: false, error: null });
 
       try {
         const amount = customAmount || SOL_AMOUNT;
@@ -189,18 +184,14 @@ export const usePhantomPayment = (): PaymentHookReturn => {
         let signature: string;
 
         if (isMobile && wallet && 'signTransaction' in wallet) {
-          console.log('Using mobile wallet flow with signTransaction');
+          console.log('Using direct Phantom connection for mobile wallet');
           signature = await processPaymentDirectly(transaction, connection, publicKey);
         } else {
-          console.log('Using desktop wallet flow with sendTransaction');
+          console.log('Using wallet adapter sendTransaction for desktop');
           signature = await sendTransaction(transaction, connection);
         }
 
-        setPaymentStatus({
-          signature,
-          confirmed: false,
-          error: null,
-        });
+        setPaymentStatus({ signature, confirmed: false, error: null });
 
         await connection.confirmTransaction(
           {
@@ -211,35 +202,23 @@ export const usePhantomPayment = (): PaymentHookReturn => {
           'confirmed',
         );
 
-        setPaymentStatus({
-          signature,
-          confirmed: true,
-          error: null,
-        });
+        setPaymentStatus({ signature, confirmed: true, error: null });
 
         console.log(`Payment successful! Signature: ${signature}`);
-        return true;
+        return signature;
       } catch (error: any) {
         console.error('Payment failed:', error);
-        setPaymentStatus({
-          signature: null,
-          confirmed: false,
-          error: error?.message || 'Payment failed',
-        });
-        return false;
+        setPaymentStatus({ signature: null, confirmed: false, error: error?.message || 'Payment failed' });
+        return null;
       } finally {
         setIsProcessingPayment(false);
       }
     },
-    [connected, publicKey, sendTransaction, connection, wallet, getBalance]
+    [connected, publicKey, sendTransaction, connection, wallet, getBalance],
   );
 
   const resetPaymentStatus = useCallback(() => {
-    setPaymentStatus({
-      signature: null,
-      confirmed: false,
-      error: null,
-    });
+    setPaymentStatus({ signature: null, confirmed: false, error: null });
   }, []);
 
   return {
