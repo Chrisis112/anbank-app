@@ -37,14 +37,14 @@ interface PaymentHookReturn {
 
 export const usePhantomPayment = (): PaymentHookReturn => {
   const { connection } = useConnection();
-  const { 
-    publicKey, 
-    connected, 
-    connecting, 
-    connect, 
-    disconnect, 
+  const {
+    wallet,
+    publicKey,
+    connected,
+    connecting,
+    connect,
+    disconnect,
     sendTransaction,
-    wallet
   } = useWallet();
 
   // Local states
@@ -52,17 +52,15 @@ export const usePhantomPayment = (): PaymentHookReturn => {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({
     signature: null,
     confirmed: false,
-    error: null
+    error: null,
   });
   const [isPhantomInstalled, setIsPhantomInstalled] = useState(false);
 
   // Check if Phantom is installed (works on desktop and mobile)
   useEffect(() => {
     const checkPhantomInstalled = () => {
-      // Check for browser extension (desktop)
       if (typeof window !== 'undefined') {
         const isDesktopPhantom = !!(window as any).solana?.isPhantom;
-        // Mobile app detection - Phantom mobile injects differently
         const isMobilePhantom = !!(window as any).phantom?.solana;
         setIsPhantomInstalled(isDesktopPhantom || isMobilePhantom);
       }
@@ -77,27 +75,26 @@ export const usePhantomPayment = (): PaymentHookReturn => {
   }, [wallet]);
 
   // Connect wallet function with cross-platform support
-const connectWallet = useCallback(async (): Promise<boolean> => {
-  if (!wallet) {
-    setPaymentStatus(prev => ({
-      ...prev,
-      error: 'No wallet selected, please choose a wallet first.',
-    }));
-    return false;
-  }
-  try {
-    await connect();
-    return true;
-  } catch (error) {
-    console.error('Failed to connect wallet:', error);
-    setPaymentStatus(prev => ({
-      ...prev,
-      error: 'Failed to connect wallet. Please try again.',
-    }));
-    return false;
-  }
-}, [connect, wallet]);
-
+  const connectWallet = useCallback(async (): Promise<boolean> => {
+    if (!wallet) {
+      setPaymentStatus((prev) => ({
+        ...prev,
+        error: 'No wallet selected, please choose a wallet first.',
+      }));
+      return false;
+    }
+    try {
+      await connect();
+      return true;
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+      setPaymentStatus((prev) => ({
+        ...prev,
+        error: 'Failed to connect wallet. Please try again.',
+      }));
+      return false;
+    }
+  }, [connect, wallet]);
 
   // Disconnect wallet
   const disconnectWallet = useCallback(async (): Promise<void> => {
@@ -128,7 +125,7 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
       setPaymentStatus({
         signature: null,
         confirmed: false,
-        error: 'Wallet not connected'
+        error: 'Wallet not connected',
       });
       return false;
     }
@@ -137,7 +134,7 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
       setPaymentStatus({
         signature: null,
         confirmed: false,
-        error: 'Receiver wallet not configured'
+        error: 'Receiver wallet not configured',
       });
       return false;
     }
@@ -146,7 +143,7 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
     setPaymentStatus({
       signature: null,
       confirmed: false,
-      error: null
+      error: null,
     });
 
     try {
@@ -160,7 +157,7 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
 
       // Check if user has sufficient balance
       const balance = await getBalance();
-      if (balance !== null && balance < amount + 0.001) { // +0.001 for transaction fees
+      if (balance !== null && balance < amount + 0.001) {
         throw new Error('Insufficient balance for transaction');
       }
 
@@ -173,16 +170,18 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
       }
 
       // Create transaction
-      const transaction = new Transaction();
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey,
+          toPubkey: receiverPublicKey,
+          lamports: Math.floor(lamports),
+        }),
+      );
 
-      // Add transfer instruction
-      const transferInstruction = SystemProgram.transfer({
-        fromPubkey: publicKey,
-        toPubkey: receiverPublicKey,
-        lamports: Math.floor(lamports), // Ensure integer lamports
-      });
-
-      transaction.add(transferInstruction);
+      // Fetch recent blockhash and set fee payer
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = publicKey;
 
       // Send transaction
       console.log(`Sending ${amount} SOL to ${RECEIVER_WALLET}...`);
@@ -191,7 +190,7 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
       setPaymentStatus({
         signature,
         confirmed: false,
-        error: null
+        error: null,
       });
 
       // Confirm transaction
@@ -201,12 +200,11 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
       setPaymentStatus({
         signature,
         confirmed: true,
-        error: null
+        error: null,
       });
 
       console.log(`Payment successful! Signature: ${signature}`);
       return true;
-
     } catch (error: any) {
       const errorMessage = error?.message || 'Payment failed';
       console.error('Payment failed:', error);
@@ -214,7 +212,7 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
       setPaymentStatus({
         signature: null,
         confirmed: false,
-        error: errorMessage
+        error: errorMessage,
       });
 
       return false;
@@ -228,27 +226,24 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
     setPaymentStatus({
       signature: null,
       confirmed: false,
-      error: null
+      error: null,
     });
   }, []);
 
   return {
-   wallet, 
+    wallet,
     isConnected: connected,
     isConnecting: connecting,
     publicKey,
 
-    // Payment states
     isProcessingPayment,
     paymentStatus,
 
-    // Functions
     connectWallet,
     disconnectWallet,
     processPayment,
     resetPaymentStatus,
 
-    // Utility functions
     getBalance,
     isPhantomInstalled,
   };
