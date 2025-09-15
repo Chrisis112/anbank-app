@@ -23,58 +23,80 @@ export const encryptPayload = (
   return bs58.encode(encrypted);
 };
 
-export const decryptPayload = (
+export function decryptPayload(
   encryptedBase58: string,
   nonceBase58: string,
   phantomPublicKey: string,
   dappPrivateKey: string
-): any | null => {
+): any | null {
   try {
     if (!encryptedBase58 || !nonceBase58 || !dappPrivateKey) {
-      throw new Error("Missing required inputs for decryption");
+      throw new Error('Missing required input for decryption');
     }
 
     const encrypted = bs58.decode(encryptedBase58);
     const nonce = bs58.decode(nonceBase58);
     const dappPrivKey = bs58.decode(dappPrivateKey);
 
-    // ====== ВАЖНО! ДЛЯ ОТЛАДКИ: ======
-    console.log("decryptPayload: dApp Private Key (b58):", dappPrivateKey);
-    console.log("decryptPayload: dApp Private Key (hex):", Buffer.from(dappPrivKey).toString('hex'));
-    console.log("decryptPayload: dApp Private Key length:", dappPrivKey.length);
+    console.group('decryptPayload debug');
+    console.log('Encrypted (base58):', encryptedBase58.slice(0, 10) + '...');
+    console.log('Encrypted (hex):', Buffer.from(encrypted).slice(0, 10).toString('hex') + '...');
+    console.log('Nonce (base58):', nonceBase58);
+    console.log('Nonce (hex):', Buffer.from(nonce).toString('hex'));
+    console.log('DApp PrivateKey (base58):', dappPrivateKey.slice(0, 10) + '...');
+    console.log('DApp PrivateKey (hex):', Buffer.from(dappPrivKey).toString('hex'));
+    console.log('DApp PrivateKey length:', dappPrivKey.length);
 
-    let phantomPubKey: Uint8Array;
     if (phantomPublicKey) {
-      phantomPubKey = bs58.decode(phantomPublicKey);
-      console.log("decryptPayload: Phantom Public Key (b58):", phantomPublicKey);
-      console.log("decryptPayload: Phantom Public Key (hex):", Buffer.from(phantomPubKey).toString('hex'));
-      console.log("decryptPayload: Phantom Public Key length:", phantomPubKey.length);
+      const phantomPubKeyDecoded = bs58.decode(phantomPublicKey);
+      console.log('Phantom PublicKey (base58):', phantomPublicKey.slice(0, 10) + '...');
+      console.log('Phantom PublicKey (hex):', Buffer.from(phantomPubKeyDecoded).toString('hex'));
+      console.log('Phantom PublicKey length:', phantomPubKeyDecoded.length);
+
+      if (phantomPubKeyDecoded.length !== 32) {
+        throw new Error(`Invalid Phantom PublicKey length: ${phantomPubKeyDecoded.length}`);
+      }
+
+      const decrypted = nacl.box.open(encrypted, nonce, phantomPubKeyDecoded, dappPrivKey);
+
+      if (!decrypted) {
+        console.error('Decryption failed with Phantom PublicKey');
+        return null;
+      }
+
+      const decoded = decodeUTF8(decrypted);
+      console.groupEnd();
+      return JSON.parse(decoded);
     } else {
-      const dappPubKey = localStorage.getItem("phantom_dapp_public_key");
-      phantomPubKey = dappPubKey ? bs58.decode(dappPubKey) : new Uint8Array(0);
-      console.log("decryptPayload: (fallback) dApp Public Key (b58):", dappPubKey);
-      console.log("decryptPayload: (fallback) dApp Public Key (hex):", Buffer.from(phantomPubKey).toString('hex'));
-      console.log("decryptPayload: (fallback) dApp Public Key length:", phantomPubKey.length);
+      const dappPubKey = localStorage.getItem('phantom_dapp_public_key');
+      if (!dappPubKey) {
+        throw new Error('Missing dApp PublicKey');
+      }
+
+      const dappPubKeyDecoded = bs58.decode(dappPubKey);
+
+      console.log('Using fallback dApp PublicKey (base58):', dappPubKey.slice(0, 10) + '...');
+      console.log('Using fallback dApp PublicKey (hex):', Buffer.from(dappPubKeyDecoded).toString('hex'));
+      console.log('Fallback dApp PublicKey length:', dappPubKeyDecoded.length);
+
+      if (dappPubKeyDecoded.length !== 32) {
+        throw new Error(`Invalid dApp PublicKey length: ${dappPubKeyDecoded.length}`);
+      }
+
+      const decrypted = nacl.box.open(encrypted, nonce, dappPubKeyDecoded, dappPrivKey);
+
+      if (!decrypted) {
+        console.error('Decryption failed with fallback dApp PublicKey');
+        return null;
+      }
+
+      const decoded = decodeUTF8(decrypted);
+      console.groupEnd();
+      return JSON.parse(decoded);
     }
 
-    console.log("decryptPayload: Nonce (b58):", nonceBase58);
-    console.log("decryptPayload: Nonce (hex):", Buffer.from(nonce).toString('hex'));
-    console.log("decryptPayload: Nonce length:", nonce.length);
-
-    console.log("decryptPayload: Encrypted (b58, first 20):", encryptedBase58.slice(0, 20) + "...");
-    console.log("decryptPayload: Encrypted (hex, first 20):", Buffer.from(encrypted).toString('hex').slice(0, 40) + "...");
-
-    const decrypted = nacl.box.open(encrypted, nonce, phantomPubKey, dappPrivKey);
-
-    if (!decrypted) {
-      console.error("nacl.box.open returned null");
-      return null;
-    }
-
-    const decoded = decodeUTF8(decrypted);
-    return JSON.parse(decoded);
   } catch (error) {
-    console.error("Decryption error:", error);
+    console.error('decryptPayload error:', error);
     return null;
   }
-};
+}
