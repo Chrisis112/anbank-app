@@ -68,26 +68,30 @@ export default function RegistrationForm() {
   };
 
   // Mobile wallet connect function
-  const handleConnectPhantomWallet = async () => {
-    if (!isMobile) return;
-    
-    setIsConnectingWallet(true);
-    
-    try {
-      const connected = await phantom.connectWallet();
-      if (connected) {
-        setIsMobileWalletConnected(true);
-        toast.success('Phantom Wallet connected successfully!');
-      } else {
-        toast.error('Failed to connect Phantom Wallet');
-      }
-    } catch (error) {
-      console.error('Connect wallet error:', error);
-      toast.error('Error connecting to Phantom Wallet');
-    } finally {
-      setIsConnectingWallet(false);
+const handleConnectPhantomWallet = async () => {
+  if (!isMobile) return;
+
+  setIsConnectingWallet(true);
+
+  try {
+    const connected = await phantom.connectWallet();
+    console.log('phantom.connectWallet() result:', connected);
+    console.log('phantom.phantomPublicKey after connect:', phantom.phantomPublicKey);
+
+    if (connected) {
+      setIsMobileWalletConnected(true);
+      toast.success('Phantom Wallet connected successfully!');
+    } else {
+      toast.error('Failed to connect Phantom Wallet');
     }
-  };
+  } catch (error) {
+    console.error('Connect wallet error:', error);
+    toast.error('Error connecting to Phantom Wallet');
+  } finally {
+    setIsConnectingWallet(false);
+  }
+};
+
 
   const handleRegisterSubmit = async (data: {
     nickname: string;
@@ -174,6 +178,7 @@ useEffect(() => {
 }, [phantom.phantomPublicKey]);
 // При изменении ключа в phantom обновляем локальный стейт и localStorage
 useEffect(() => {
+  console.log('phantom.phantomPublicKey changed:', phantom.phantomPublicKey);
   if (phantom.phantomPublicKey) {
     setPhantomPublicKey(phantom.phantomPublicKey);
     localStorage.setItem('phantom_user_public_key', phantom.phantomPublicKey);
@@ -184,6 +189,7 @@ useEffect(() => {
     localStorage.removeItem('phantom_user_public_key');
   }
 }, [phantom.phantomPublicKey]);
+
 useEffect(() => {
   const savedKey = localStorage.getItem('phantom_user_public_key');
   if (savedKey && !phantom.phantomPublicKey) {
