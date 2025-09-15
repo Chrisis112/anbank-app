@@ -144,32 +144,22 @@ const processPayment = useCallback(async (customAmount?: number): Promise<boolea
       })
     );
 
-    // ✅ Не устанавливаем вручную recentBlockhash и feePayer
+    // ❌ НЕ ставим feePayer
+    // ❌ НЕ ставим recentBlockhash
+    // ✅ Всё сделает sendTransaction, если передать connection
 
-    const signature = await sendTransaction(transaction, connection);
+    const signature = await sendTransaction(transaction, connection); // connection обязательно!
 
-    setPaymentStatus({ signature, confirmed: false, error: null });
-
-    // ✅ Получаем блокхеш, чтобы подтвердить транзакцию
-    const latestBlockhash = await connection.getLatestBlockhash();
-
-    await connection.confirmTransaction(
-      {
-        signature: signature,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-      },
-      'confirmed',
-    );
+    // Подтверждение транзакции
+    await connection.confirmTransaction(signature, 'confirmed');
 
     setPaymentStatus({ signature, confirmed: true, error: null });
-
-    console.log(`Payment successful! Signature: ${signature}`);
+    console.log(`✅ Payment successful! Signature: ${signature}`);
 
     return true;
   } catch (error: any) {
-    setPaymentStatus({ signature: null, confirmed: false, error: error.message || 'Payment failed' });
     console.error('Payment failed:', error);
+    setPaymentStatus({ signature: null, confirmed: false, error: error.message || 'Payment failed' });
     return false;
   } finally {
     setIsProcessingPayment(false);
