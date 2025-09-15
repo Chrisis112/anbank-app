@@ -24,7 +24,7 @@ interface PaymentHookReturn {
 
   connectWallet: () => Promise<boolean>;
   disconnectWallet: () => Promise<void>;
- processPayment: (customAmount?: number) => Promise<string | null>;
+  processPayment: (customAmount?: number) => Promise<boolean>;
   resetPaymentStatus: () => void;
 
   getBalance: () => Promise<number | null>;
@@ -131,66 +131,107 @@ export const usePhantomPayment = (): PaymentHookReturn => {
     }
   }, [publicKey, connection]);
 
-const processPayment = useCallback(async (customAmount?: number): Promise<string | null> => {
-  if (!connected || !publicKey || !sendTransaction) {
-    setPaymentStatus({ signature: null, confirmed: false, error: 'Wallet not connected' });
-    return null;
-  }
+  const processPayment = useCallback(
+    async (customAmount?: number): Promise<boolean> => {
+      if (!connected || !publicKey || !sendTransaction) {
+        setPaymentStatus({
+          signature: null,
+          confirmed: false,
+          error: 'Wallet not connected',
+        });
+        return false;
+      }
 
-  if (!RECEIVER_WALLET) {
-    setPaymentStatus({ signature: null, confirmed: false, error: 'Receiver wallet not configured' });
-    return null;
-  }
+      if (!RECEIVER_WALLET) {
+        setPaymentStatus({
+          signature: null,
+          confirmed: false,
+          error: 'Receiver wallet not configured',
+        });
+        return false;
+      }
 
-  setIsProcessingPayment(true);
-  setPaymentStatus({ signature: null, confirmed: false, error: null });
+      setIsProcessingPayment(true);
+      setPaymentStatus({
+        signature: null,
+        confirmed: false,
+        error: null,
+      });
 
-  try {
-    const amount = customAmount || SOL_AMOUNT;
-    if (amount <= 0) throw new Error('Invalid payment amount');
+      try {
+        const amount = customAmount || SOL_AMOUNT;
+        if (amount <= 0) throw new Error('Invalid payment amount');
 
-    const lamports = amount * LAMPORTS_PER_SOL;
-    const balance = await getBalance();
-    if (balance !== null && balance < amount + 0.001) throw new Error('Insufficient balance');
+        const lamports = amount * LAMPORTS_PER_SOL;
+        const balance = await getBalance();
+        if (balance !== null && balance < amount + 0.001) throw new Error('Insufficient balance');
 
-    const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
+        const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: publicKey,
-        toPubkey: receiverPublicKey,
-        lamports: Math.floor(lamports),
-      }),
-    );
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: publicKey,
+            toPubkey: receiverPublicKey,
+            lamports: Math.floor(lamports),
+          }),
+        );
 
-    const latestBlockhash = await connection.getLatestBlockhash();
-    transaction.recentBlockhash = latestBlockhash.blockhash;
-    transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
-    transaction.feePayer = publicKey;
+        const latestBlockhash = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = latestBlockhash.blockhash;
+        transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
+        transaction.feePayer = publicKey;
 
-    const signature = await sendTransaction(transaction, connection);
+        console.log('User publicKey:', publicKey?.toBase58());
+        console.log('Transaction feePayer:', transaction.feePayer?.toBase58());
 
-    setPaymentStatus({ signature, confirmed: false, error: null });
+        const isMobile = typeof window !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
-    await connection.confirmTransaction(
-      {
-        signature,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-      },
-      'confirmed',
-    );
+        let signature: string;
 
-    setPaymentStatus({ signature, confirmed: true, error: null });
+        if (isMobile && wallet && 'signTransaction' in wallet) {
+          console.log('Using mobile wallet flow with signTransaction');
+          signature = await processPaymentDirectly(transaction, connection, publicKey);
+        } else {
+          console.log('Using desktop wallet flow with sendTransaction');
+          signature = await sendTransaction(transaction, connection);
+        }
 
-    return signature;
-  } catch (error: any) {
-    setPaymentStatus({ signature: null, confirmed: false, error: error?.message || 'Payment failed' });
-    return null;
-  } finally {
-    setIsProcessingPayment(false);
-  }
-}, [connected, publicKey, sendTransaction, connection, getBalance]
+        setPaymentStatus({
+          signature,
+          confirmed: false,
+          error: null,
+        });
+
+        await connection.confirmTransaction(
+          {
+            signature,
+            blockhash: latestBlockhash.blockhash,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+          },
+          'confirmed',
+        );
+
+        setPaymentStatus({
+          signature,
+          confirmed: true,
+          error: null,
+        });
+
+        console.log(`Payment successful! Signature: ${signature}`);
+        return true;
+      } catch (error: any) {
+        console.error('Payment failed:', error);
+        setPaymentStatus({
+          signature: null,
+          confirmed: false,
+          error: error?.message || 'Payment failed',
+        });
+        return false;
+      } finally {
+        setIsProcessingPayment(false);
+      }
+    },
+    [connected, publicKey, sendTransaction, connection, wallet, getBalance]
   );
 
   const resetPaymentStatus = useCallback(() => {
@@ -206,12 +247,15 @@ const processPayment = useCallback(async (customAmount?: number): Promise<string
     isConnected: connected,
     isConnecting: connecting,
     publicKey,
+
     isProcessingPayment,
     paymentStatus,
+
     connectWallet,
     disconnectWallet,
     processPayment,
     resetPaymentStatus,
+
     getBalance,
     isPhantomInstalled,
   };
