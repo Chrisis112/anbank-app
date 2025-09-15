@@ -28,30 +28,34 @@ export default function RegistrationForm() {
   const register = useAuthStore((state) => state.register);
   const { setUser } = useUserStore();
 
-
   // States
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('newbie');
-  const { publicKey, connected, connect, wallet, disconnect } = useWallet();
-const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
+  const { publicKey, connected, connect, disconnect } = useWallet();
+  const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<{ signature: string | null; confirmed: boolean; error: string | null }>({
-  signature: null,
-  confirmed: false,
-  error: null,
-});
+  const [paymentStatus, setPaymentStatus] = useState<{
+    signature: string | null;
+    confirmed: boolean;
+    error: string | null;
+  }>({
+    signature: null,
+    confirmed: false,
+    error: null,
+  });
 
   const [dappKeys, setDappKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
+  const SOLANA_NETWORK =
+    process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
   const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
   const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.36');
 
-  // Util: detect mobile device
+  // Detect mobile device
   const isMobile = () => /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
   // Generate dApp keypair and save to localStorage
@@ -78,16 +82,20 @@ const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
     return { publicKey, privateKey };
   };
 
+  // Sync phantomPublicKey with wallet connection
   useEffect(() => {
-  if (connected && publicKey) {
-    setPhantomPublicKey(publicKey.toBase58());
-  } else {
-    setPhantomPublicKey(null);
-  }
-}, [connected, publicKey]);
+    console.log('Wallet connection status changed:', { connected, publicKey: publicKey?.toBase58() });
+    if (connected && publicKey) {
+      const pkStr = publicKey.toBase58();
+      setPhantomPublicKey(pkStr);
+      localStorage.setItem('phantom_user_public_key', pkStr);
+    } else {
+      setPhantomPublicKey(null);
+      localStorage.removeItem('phantom_user_public_key');
+    }
+  }, [connected, publicKey]);
 
-
-  // Initialize dApp keys and phantom public key on mount
+  // Initialize dApp keys on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -95,39 +103,31 @@ const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
     setDappKeys(localDappKeys);
 
     const savedPhantomPk = localStorage.getItem('phantom_user_public_key');
-    if (savedPhantomPk) {
+    if (savedPhantomPk && !phantomPublicKey) {
       setPhantomPublicKey(savedPhantomPk);
     }
   }, []);
 
+  const resetPaymentStatus = useCallback(() => {
+    setPaymentStatus({ signature: null, confirmed: false, error: null });
+  }, []);
 
-const resetPaymentStatus = useCallback(() => {
-  setPaymentStatus({ signature: null, confirmed: false, error: null });
-}, []);
-
-  // Clear phantom-related entries in localStorage and reset URL
+  // Clear phantom-related localStorage entries
   const clearPhantomStorage = () => {
     localStorage.removeItem('phantom_dapp_public_key');
     localStorage.removeItem('phantom_dapp_private_key');
     localStorage.removeItem('phantom_user_public_key');
-    localStorage.removeItem('phantom_dapp_public_key');
-    localStorage.removeItem('phantom_dapp_private_key');
-    localStorage.removeItem('phantom_dapp_public_key');
-    localStorage.removeItem('phantom_user_public_key');
-    localStorage.removeItem('phantom_user_public_key');
-    localStorage.removeItem('phantom_dapp_private_key');
-    localStorage.removeItem('phantom_dapp_public_key');
-    localStorage.removeItem('phantom_user_public_key');
-    localStorage.removeItem('phantom_user_public_key');
-    localStorage.removeItem('phantom_dapp_private_key');
-    localStorage.removeItem('phantom_user_public_key');
-    localStorage.removeItem('phantom_user_public_key');
-    localStorage.removeItem('phantom_user_public_key');
-    localStorage.removeItem('phantom_dapp_private_key');
-    localStorage.removeItem('phantom_user_public_key');
+    localStorage.removeItem('phantom_dapp_pending_action');
+    localStorage.removeItem('phantom_dapp_delayed_action');
+    localStorage.removeItem('phantom_registration_data');
+    localStorage.removeItem('phantom_subscription_data');
+    localStorage.removeItem('phantom_dapp_actual_action');
+    localStorage.removeItem('phantom_dapp_error');
+    localStorage.removeItem('phantom_dapp_payload');
+    localStorage.removeItem('phantom_dapp_signature');
   };
 
-  // Handle Phantom callback from URL, invoked once on mount
+  // Handle Phantom callback from URL params once on mount
   useEffect(() => {
     async function processCallback() {
       const params = new URLSearchParams(window.location.search);
@@ -160,7 +160,7 @@ const resetPaymentStatus = useCallback(() => {
           const decrypted = decryptPayload(data, nonce, phantomPubKey, dappKeysLocal.privateKey);
 
           if (!decrypted) {
-            toast.error('Ошибка расшифровки данных');
+            toast.error('Ошибка расшифровки данных Phantom');
             clearPhantomStorage();
             window.history.replaceState({}, '', window.location.pathname);
             return;
@@ -183,6 +183,7 @@ const resetPaymentStatus = useCallback(() => {
                 }, 1000);
               }
             }
+            window.history.replaceState({}, '', window.location.pathname);
             return;
           }
 
@@ -194,6 +195,7 @@ const resetPaymentStatus = useCallback(() => {
             if (!paymentSignature) {
               toast.error('Транзакция не подписана');
               clearPhantomStorage();
+              window.history.replaceState({}, '', window.location.pathname);
               return;
             }
 
@@ -251,114 +253,142 @@ const resetPaymentStatus = useCallback(() => {
       }
     }
     processCallback();
+
     return () => abortControllerRef.current?.abort();
   }, []);
 
   // Connect wallet (for desktop and mobile)
-const connectWallet = useCallback(async (): Promise<boolean> => {
-  try {
-    await connect();
-    return true;
-  } catch (error) {
-    toast.error('Failed to connect wallet: ' + (error as Error).message);
-    return false;
-  }
-}, [connect]);
+  const connectWallet = useCallback(async (): Promise<boolean> => {
+    try {
+      await connect();
+      console.log('Phantom wallet connected:', publicKey?.toBase58());
+      toast.success('Phantom Wallet connected successfully!');
+      return true;
+    } catch (error) {
+      toast.error('Failed to connect wallet: ' + (error as Error).message);
+      return false;
+    }
+  }, [connect, publicKey]);
 
+  // Create Phantom Mobile deeplink for signing transaction
+  const createPhantomMobileDeeplink = async (
+    transaction: Transaction,
+    dappKeys: { publicKey: string; privateKey: string },
+    phantomPublicKey: string,
+    redirectUrl: string
+  ) => {
+    const nonce = generateRandomNonce();
+    const serializedMessage = transaction.serializeMessage();
+    const base58Transaction = bs58.encode(serializedMessage);
+    const payload = { transaction: base58Transaction };
+
+    const encryptedPayload = encryptPayload(
+      payload,
+      nonce,
+      dappKeys.publicKey,
+      phantomPublicKey,
+      bs58.decode(dappKeys.privateKey)
+    );
+
+    const encodedRedirectUrl = encodeURIComponent(redirectUrl);
+
+    const deeplink =
+      `https://phantom.app/ul/v1/signTransaction?` +
+      `dapp_encryption_public_key=${dappKeys.publicKey}` +
+      `&nonce=${nonce}` +
+      `&redirect_url=${encodedRedirectUrl}` +
+      `&payload=${encryptedPayload}`;
+
+    return deeplink;
+  };
 
   // Payment processing function (handles desktop & mobile)
-  const processPayment = useCallback(async (amountToSend?: number) => {
-    if (!phantomPublicKey || !dappKeys) {
-      toast.error('Кошелек не подключен или ключи не инициализированы');
-      return false;
-    }
-
-    const amount = amountToSend || SOL_AMOUNT;
-    if (amount <= 0) {
-      toast.error('Невалидная сумма платежа');
-      return false;
-    }
-
-    const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
-    const connection = new Connection(SOLANA_NETWORK);
-    const balance = await connection.getBalance(new PublicKey(phantomPublicKey));
-
-    if (balance < lamports + 10000) { // 10000 lamports fee margin
-      toast.error('Недостаточно средств');
-      return false;
-    }
-
-    const toPubkey = new PublicKey(RECEIVER_WALLET);
-
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: new PublicKey(phantomPublicKey),
-        toPubkey,
-        lamports,
-      })
-    );
-    const blockhash = (await connection.getLatestBlockhash()).blockhash;
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = new PublicKey(phantomPublicKey);
-
-    if (!isMobile()) {
-      // Desktop flow w/ injected Phantom extension
-      try {
-        const provider = (window as any).solana;
-        await provider.connect();
-        const signedTx = await provider.signTransaction(transaction);
-        const signature = await connection.sendRawTransaction(signedTx.serialize());
-        await connection.confirmTransaction(signature);
-        toast.success('Оплата прошла успешно');
-        return signature;
-      } catch (error) {
-        toast.error('Ошибка платежа');
-        console.error(error);
+  const processPayment = useCallback(
+    async (amountToSend?: number) => {
+      if (!phantomPublicKey || !dappKeys) {
+        toast.error('Кошелек не подключен или ключи не инициализированы');
         return false;
       }
-    } else {
-      // Mobile flow - use deeplink
-      try {
-        const nonce = generateRandomNonce();
-        const serializedMessage = transaction.serializeMessage();
-        const base58Transaction = bs58.encode(serializedMessage);
 
-        const payload = { transaction: base58Transaction };
-
-        const encryptedPayload = encryptPayload(
-          payload,
-          nonce,
-          dappKeys.publicKey,
-          phantomPublicKey,
-          bs58.decode(dappKeys.privateKey)
-        );
-
-        localStorage.setItem('phantom_dapp_pending_action', 'transaction');
-
-        const redirectUrl = encodeURIComponent(window.location.href);
-
-        const deeplink = `https://phantom.app/ul/v1/signTransaction?dapp_encryption_public_key=${dappKeys.publicKey}&nonce=${nonce}&redirect_url=${redirectUrl}&payload=${encryptedPayload}`;
-
-        toast.info('Перенаправляем в приложение Phantom для оплаты');
-        window.location.href = deeplink;
-
-        return false; // payment will continue after callback
-      } catch (error) {
-        toast.error('Ошибка создания платежа');
-        console.error(error);
+      const amount = amountToSend || SOL_AMOUNT;
+      if (amount <= 0) {
+        toast.error('Невалидная сумма платежа');
         return false;
       }
-    }
-  }, [phantomPublicKey, dappKeys]);
 
-return {
-  disconnectWallet: () => disconnect(),
-  processPayment,
-  connectWallet,
-  resetPaymentStatus,
-  paymentStatus,
-  phantomPublicKey,
-  dappKeys,
-  isConnected: connected,
-};
+      const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+      const connection = new Connection(SOLANA_NETWORK);
+      const balance = await connection.getBalance(new PublicKey(phantomPublicKey));
+
+      if (balance < lamports + 10000) {
+        // 10000 lamports fee margin
+        toast.error('Недостаточно средств');
+        return false;
+      }
+
+      const toPubkey = new PublicKey(RECEIVER_WALLET);
+
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: new PublicKey(phantomPublicKey),
+          toPubkey,
+          lamports,
+        })
+      );
+      const blockhash = (await connection.getLatestBlockhash()).blockhash;
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = new PublicKey(phantomPublicKey);
+
+      if (!isMobile()) {
+        // Desktop flow w/ injected Phantom extension
+        try {
+          const provider = (window as any).solana;
+          await provider.connect();
+          const signedTx = await provider.signTransaction(transaction);
+          const signature = await connection.sendRawTransaction(signedTx.serialize());
+          await connection.confirmTransaction(signature);
+          toast.success('Оплата прошла успешно');
+          return signature;
+        } catch (error) {
+          toast.error('Ошибка платежа');
+          console.error(error);
+          return false;
+        }
+      } else {
+        // Mobile flow - use deeplink
+        try {
+          const deeplink = await createPhantomMobileDeeplink(
+            transaction,
+            dappKeys,
+            phantomPublicKey,
+            window.location.href
+          );
+
+          toast.info('Перенаправляем в приложение Phantom для оплаты');
+          window.location.href = deeplink;
+
+          return false; // payment will continue after callback
+        } catch (error) {
+          toast.error('Ошибка создания платежа');
+          console.error(error);
+          return false;
+        }
+      }
+    },
+    [phantomPublicKey, dappKeys]
+  );
+
+  // Your component's JSX and functions for register, login, etc.
+
+  // Return at least the connectWallet, processPayment and phantomPublicKey
+  return {
+    connectWallet,
+    processPayment,
+    phantomPublicKey,
+    resetPaymentStatus,
+    paymentStatus,
+    disconnectWallet: () => disconnect(),
+    isConnected: connected,
+    dappKeys,
+  };
 }

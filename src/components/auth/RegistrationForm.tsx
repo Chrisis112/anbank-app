@@ -583,7 +583,7 @@ useEffect(() => {
               {/* Mobile Wallet Connection Button */}
               {isMobile && (
                 <div className="mb-4">
-                  <PhantomWalletConnector />
+                  
                   <button
                     onClick={handleConnectPhantomWallet}
                     disabled={isConnectingWallet || isMobileWalletConnected}
