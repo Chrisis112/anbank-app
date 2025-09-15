@@ -15,6 +15,7 @@ export const encryptPayload = (
   phantomPublicKey: string,
   dappPrivateKey: Uint8Array
 ): string => {
+  // Use the provided nonce instead of generating new one
   const nonce = bs58.decode(nonceBase58);
   const phantomPubKey = bs58.decode(phantomPublicKey);
   const message = encodeUTF8(JSON.stringify(payload));
@@ -36,29 +37,18 @@ export const decryptPayload = (
 
     const encrypted = bs58.decode(encryptedBase58);
     const nonce = bs58.decode(nonceBase58);
-    const dappPrivKey = bs58.decode(dappPrivateKey);
-
-    console.group('decryptPayload debug');
-    console.log('Encrypted (base58) prefix:', encryptedBase58.slice(0, 20) + '...');
-    console.log('Encrypted length:', encrypted.length);
-    console.log('Nonce (base58):', nonceBase58);
-    console.log('Nonce length:', nonce.length);
-    console.log('DApp private key (base58 prefix):', dappPrivateKey.slice(0, 20) + '...');
-    console.log('DApp private key length:', dappPrivKey.length);
+    // Fix: dappPrivateKey is already Uint8Array, don't decode it again
+    const dappPrivKey = typeof dappPrivateKey === 'string' ? bs58.decode(dappPrivateKey) : dappPrivateKey;
 
     let phantomPubKey: Uint8Array;
     if (phantomPublicKey) {
       phantomPubKey = bs58.decode(phantomPublicKey);
-      console.log('Phantom public key (base58 prefix):', phantomPublicKey.slice(0, 20) + '...');
-      console.log('Phantom public key length:', phantomPubKey.length);
     } else {
       const fallbackPubKeyBase58 = localStorage.getItem('phantom_dapp_public_key');
       if (!fallbackPubKeyBase58) {
         throw new Error('Missing fallback public key');
       }
       phantomPubKey = bs58.decode(fallbackPubKeyBase58);
-      console.log('Fallback (dApp) public key (base58 prefix):', fallbackPubKeyBase58.slice(0, 20) + '...');
-      console.log('Fallback public key length:', phantomPubKey.length);
     }
 
     if (phantomPubKey.length !== 32 || dappPrivKey.length !== 32 || nonce.length !== 24) {
@@ -70,12 +60,10 @@ export const decryptPayload = (
     const decrypted = nacl.box.open(encrypted, nonce, phantomPubKey, dappPrivKey);
     if (!decrypted) {
       console.error('nacl.box.open returned null (decryption failed)');
-      console.groupEnd();
       return null;
     }
 
     const decryptedStr = decodeUTF8(decrypted);
-    console.groupEnd();
     return JSON.parse(decryptedStr);
 
   } catch (error) {
