@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 
@@ -8,7 +8,8 @@ import RegisterForm from './RegisterForm';
 import LoginModal from './LoginModal';
 import SubscriptionModal from './SubscriptionModal';
 
-import { usePhantomPayment } from '@/hooks/usePhantomPayment';
+import usePhantomPayment from '@/hooks/usePhantomPayment';
+
 import { checkUnique, registerUser, loginUser, renewSubscription } from '@/utils/api';
 import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
@@ -25,18 +26,16 @@ export default function RegistrationForm() {
   const walletModal = useWalletModal();
 
   const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-
+const abortControllerRef = useRef<AbortController | null>(null);
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-
   const [loginEmail, setLoginEmail] = useState('');
 
   const [registerLoading, setRegisterLoading] = useState(false);
-
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
 
@@ -79,6 +78,7 @@ export default function RegistrationForm() {
     }
 
     try {
+      // Register with promo code (no payment)
       if (data.promoCode) {
         const result = await registerUser({
           nickname: data.nickname,
@@ -89,9 +89,7 @@ export default function RegistrationForm() {
           solanaPublicKey: null,
           paymentSignature: null,
         });
-
         setRegisterLoading(false);
-
         if (result.success) {
           localStorage.setItem('token', result.token || '');
           setUser(result.user);
@@ -100,13 +98,12 @@ export default function RegistrationForm() {
         } else {
           toast.error(result.error || 'Registration failed');
         }
-
         return;
       }
 
       // Mobile flow
       if (isMobile) {
-        localStorage.setItem('phantom_actual_action', 'registration');
+        localStorage.setItem('phantom_pending_action', 'registration');
         localStorage.setItem(
           'phantom_registration_data',
           JSON.stringify({
@@ -118,67 +115,73 @@ export default function RegistrationForm() {
           }),
         );
 
-        if (!phantom.publicKey) {
-          localStorage.setItem('phantom_delayed_action', 'registration');
+        if (!phantom.phantomPublicKey) {
           walletModal.setVisible(true);
           setRegisterLoading(false);
-          toast.info('Please connect Phantom and then retry registration');
+          toast.info('Please connect Phantom Wallet and retry registration.');
           return;
-        } else {
-          const signature = await phantom.processPayment();
-          if (!signature) {
-            toast.error('Payment failed');
-            setRegisterLoading(false);
-            return;
-          }
         }
 
+        const paymentSuccess = await phantom.processPayment();
+        if (!paymentSuccess) {
+          toast.error('Payment failed');
+          setRegisterLoading(false);
+          return;
+        }
         setRegisterLoading(false);
-        toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
+        toast.info('Payment in progress in Phantom app, please return here to continue.');
         return;
       }
 
       // Desktop flow
-      if (!phantom.isConnected) {
-        if (!phantom.publicKey) {
-          walletModal.setVisible(true);
-          setRegisterLoading(false);
-          return;
-        }
-        await phantom.connectWallet();
-      }
+if (!phantom.isConnected) {
+  if (!phantom.phantomPublicKey) {
+    walletModal.setVisible(true);
+    setRegisterLoading(false);
+    toast.info('Connect your Phantom wallet first');
+    return;
+  }
+  // Попытка подключиться к Phantom расширению
+  const connected = await phantom.connectWallet();
+  if (!connected) {
+    setRegisterLoading(false);
+    toast.error('Failed to connect Phantom wallet');
+    return;
+  }
+}
 
-      const paymentSuccess = await phantom.processPayment();
-      if (!paymentSuccess) {
-        toast.error('Payment failed');
-        setRegisterLoading(false);
-        return;
-      }
+const resultPayment = await phantom.processPayment();
+if (!resultPayment) {
+  toast.error('Payment failed');
+  setRegisterLoading(false);
+  return;
+}
 
-      const paymentSignature = phantom.paymentStatus.signature;
-      if (!paymentSignature) {
-        toast.error('Payment signature not available');
-        setRegisterLoading(false);
-        return;
-      }
+// Получаем signature после успешной оплаты
+const paymentSignature = phantom.paymentStatus.signature;
+if (!paymentSignature) {
+  toast.error('Payment signature unavailable');
+  setRegisterLoading(false);
+  return;
+}
 
-      const solanaPublicKey = phantom.publicKey?.toBase58();
-      if (!solanaPublicKey) {
-        toast.error('Failed to get public key');
-        setRegisterLoading(false);
-        return;
-      }
+const solanaPublicKey = phantom.phantomPublicKey;
+if (!solanaPublicKey) {
+  toast.error('Failed to get public key from wallet');
+  setRegisterLoading(false);
+  return;
+}
 
-      const result = await registerUser({
-        nickname: data.nickname,
-        email: data.email,
-        password: data.password,
-        role: data.role,
-        solanaPublicKey,
-        paymentSignature,
-        promoCode: null,
-      });
-
+// Потом вызываете вашу регистрацию
+const result = await registerUser({
+  nickname: data.nickname,
+  email: data.email,
+  password: data.password,
+  role: data.role,
+  solanaPublicKey,
+  paymentSignature,
+  promoCode: null,
+});
       setRegisterLoading(false);
 
       if (result.success) {
@@ -189,7 +192,8 @@ export default function RegistrationForm() {
       } else {
         toast.error(result.error || 'Registration failed');
       }
-    } catch {
+    } catch (error) {
+      console.error('Registration error:', error);
       setRegisterLoading(false);
       toast.error('Registration failed');
     }
@@ -231,21 +235,22 @@ export default function RegistrationForm() {
     }
   };
 
-  const closeLoginModal = () => {
-    setIsLoginModalOpen(false);
-    setLoginError(null);
-  };
-
   const openLoginModal = () => {
     setIsLoginModalOpen(true);
     setLoginError(null);
     setActiveTab('login');
   };
 
-  const handleRenewSubscription = async () => {
-    if (phantom.publicKey && !isMobile) {
-      const solanaPublicKey = phantom.publicKey.toBase58();
+  const closeLoginModal = () => {
+    setIsLoginModalOpen(false);
+    setLoginError(null);
+    abortControllerRef.current?.abort();
+    setActiveTab('register');
+  };
 
+  const handleRenewSubscription = async () => {
+    if (phantom.phantomPublicKey && !isMobile) {
+      const solanaPublicKey = phantom.phantomPublicKey;
       const signature = phantom.paymentStatus.signature;
       if (!signature) {
         toast.error('Payment failed - no signature');
@@ -266,7 +271,7 @@ export default function RegistrationForm() {
       localStorage.setItem('phantom_actual_action', 'subscription');
       localStorage.setItem('phantom_subscription_data', JSON.stringify({ email: loginEmail }));
 
-      if (!phantom.publicKey) {
+      if (!phantom.phantomPublicKey) {
         localStorage.setItem('phantom_delayed_action', 'subscription');
         walletModal.setVisible(true);
         return;
@@ -282,10 +287,12 @@ export default function RegistrationForm() {
     }
   };
 
-  useEffect(() => {
-    phantom.resetPaymentStatus();
-    if (phantom.paymentStatus.error) toast.error(phantom.paymentStatus.error);
-  }, []);
+useEffect(() => {
+  phantom.resetPaymentStatus();
+  if (phantom.paymentStatus.error) {
+    toast.error(phantom.paymentStatus.error);
+  }
+}, []);
 
   return (
     <>
