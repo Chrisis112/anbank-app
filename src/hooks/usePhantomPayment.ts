@@ -14,6 +14,7 @@ interface PaymentStatus {
 }
 
 interface PaymentHookReturn {
+  wallet: any;
   // Connection states
   isConnected: boolean;
   isConnecting: boolean;
@@ -232,7 +233,7 @@ const connectWallet = useCallback(async (): Promise<boolean> => {
   }, []);
 
   return {
-    // Connection states
+   wallet, 
     isConnected: connected,
     isConnecting: connecting,
     publicKey,
