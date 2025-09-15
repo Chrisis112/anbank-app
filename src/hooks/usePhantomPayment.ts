@@ -136,6 +136,7 @@ const processPayment = useCallback(async (customAmount?: number): Promise<boolea
 
     const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
+    // Создаём транзакцию
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: publicKey,
@@ -144,22 +145,48 @@ const processPayment = useCallback(async (customAmount?: number): Promise<boolea
       })
     );
 
-    // ❌ НЕ ставим feePayer
-    // ❌ НЕ ставим recentBlockhash
-    // ✅ Всё сделает sendTransaction, если передать connection
+    // Получаем актуальный blockhash перед отправкой транзакции
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
-    const signature = await sendTransaction(transaction, connection); // connection обязательно!
+    // Обновляем транзакцию с новыми данными
+    transaction.recentBlockhash = blockhash;
+    transaction.lastValidBlockHeight = lastValidBlockHeight;
+    transaction.feePayer = publicKey;
 
-    // Подтверждение транзакции
-    await connection.confirmTransaction(signature, 'confirmed');
+    // Печатаем для дебага
+    console.log("Blockhash:", blockhash);
+    console.log("Last valid block height:", lastValidBlockHeight);
+    console.log("Transaction before sending:", transaction);
+
+    // Отправляем транзакцию с подписанием через wallet
+    const signature = await sendTransaction(transaction, connection);
+
+    // Обновляем статус на подтверждение
+    setPaymentStatus({ signature, confirmed: false, error: null });
+
+    // Ждём подтверждения транзакции
+    await connection.confirmTransaction(
+      {
+        signature,
+        blockhash,
+        lastValidBlockHeight,
+      },
+      'confirmed'
+    );
 
     setPaymentStatus({ signature, confirmed: true, error: null });
+
     console.log(`✅ Payment successful! Signature: ${signature}`);
 
     return true;
   } catch (error: any) {
+    // Обрабатываем ошибку
+    setPaymentStatus({
+      signature: null,
+      confirmed: false,
+      error: error?.message || 'Payment failed',
+    });
     console.error('Payment failed:', error);
-    setPaymentStatus({ signature: null, confirmed: false, error: error.message || 'Payment failed' });
     return false;
   } finally {
     setIsProcessingPayment(false);
