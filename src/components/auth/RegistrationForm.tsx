@@ -12,6 +12,7 @@ import { usePhantomPayment } from '@/hooks/usePhantomPayment';
 import { checkUnique, registerUser, loginUser, renewSubscription } from '@/utils/api';
 import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -21,42 +22,34 @@ export default function RegistrationForm() {
   const { setUser } = useUserStore();
 
   const phantom = usePhantomPayment();
+  const walletModal = useWalletModal();
 
-  // Проверка мобильного устройства через userAgent  
   const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
-  // Табы и модалки
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
-  // Loading и ошибки логина
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Email для подписки
   const [loginEmail, setLoginEmail] = useState('');
 
-  // Loading для регистрации
   const [registerLoading, setRegisterLoading] = useState(false);
 
-  // Промокод
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
 
-  // Обработка успешного промокода
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
     setPromoCodeError(null);
   };
 
-  // Обработка ошибки промокода
   const handlePromoFail = (message: string) => {
     setPromoCode(null);
     setPromoCodeError(message);
   };
 
-  // Обработка submit регистрации, приходит из RegisterForm
   const handleRegisterSubmit = async (data: {
     nickname: string;
     email: string;
@@ -86,7 +79,6 @@ export default function RegistrationForm() {
     }
 
     try {
-      // Регистрация без оплаты, если есть промокод
       if (data.promoCode) {
         const result = await registerUser({
           nickname: data.nickname,
@@ -108,26 +100,26 @@ export default function RegistrationForm() {
         } else {
           toast.error(result.error || 'Registration failed');
         }
+
         return;
       }
 
-      // Логика для мобильных устройств
       if (isMobile) {
         localStorage.setItem('phantom_actual_action', 'registration');
-        localStorage.setItem(
-          'phantom_registration_data',
-          JSON.stringify({
-            nickname: data.nickname,
-            email: data.email,
-            password: data.password,
-            role: data.role,
-            promoCode: data.promoCode,
-          })
-        );
+        localStorage.setItem('phantom_registration_data', JSON.stringify({
+          nickname: data.nickname,
+          email: data.email,
+          password: data.password,
+          role: data.role,
+          promoCode: data.promoCode,
+        }));
 
         if (!phantom.publicKey) {
           localStorage.setItem('phantom_delayed_action', 'registration');
-          await phantom.connectWallet();
+          walletModal.setVisible(true);
+          setRegisterLoading(false);
+          toast.info('Пожалуйста, подключите Phantom и повторите регистрацию');
+          return;
         } else {
           const signature = await phantom.processPayment();
           if (!signature) {
@@ -142,21 +134,28 @@ export default function RegistrationForm() {
         return;
       }
 
-      // Десктоп платеж
-const paymentSuccess = await phantom.processPayment();
-if (!paymentSuccess) {
-  toast.error('Payment failed');
-  setRegisterLoading(false);
-  return;
-}
+      if (!phantom.isConnected) {
+        if (!phantom.wallet) {
+          walletModal.setVisible(true);
+          setRegisterLoading(false);
+          return;
+        }
+        await phantom.connectWallet();
+      }
 
-// Получаем подпись из состояния paymentStatus
-const paymentSignature = phantom.paymentStatus.signature;
-if (!paymentSignature) {
-  toast.error('Payment signature not available');
-  setRegisterLoading(false);
-  return;
-}
+      const paymentSuccess = await phantom.processPayment();
+      if (!paymentSuccess) {
+        toast.error('Payment failed');
+        setRegisterLoading(false);
+        return;
+      }
+
+      const paymentSignature = phantom.paymentStatus.signature;
+      if (!paymentSignature) {
+        toast.error('Payment signature not available');
+        setRegisterLoading(false);
+        return;
+      }
 
       const solanaPublicKey = phantom.publicKey?.toBase58();
       if (!solanaPublicKey) {
@@ -191,7 +190,6 @@ if (!paymentSignature) {
     }
   };
 
-  // Обработка сабмита логина
   const handleLoginSubmit = async (email: string, password: string) => {
     setLoginLoading(true);
     setLoginError(null);
@@ -239,37 +237,34 @@ if (!paymentSignature) {
     setActiveTab('login');
   };
 
-  // Обработка продления подписки
   const handleRenewSubscription = async () => {
     if (phantom.publicKey && !isMobile) {
       const solanaPublicKey = phantom.publicKey.toBase58();
 
-const signature = phantom.paymentStatus.signature;
-if (!signature) {
-  toast.error('Payment failed - no signature');
-  return;
-}
+      const signature = phantom.paymentStatus.signature;
+      if (!signature) {
+        toast.error('Payment failed - no signature');
+        return;
+      }
 
-try {
-  const data = await renewSubscription(signature, solanaPublicKey, loginEmail);
-  toast.success('Subscription successfully renewed!');
-  localStorage.setItem('token', data.token);
-  setUser(data.user);
-  setIsSubscriptionModalOpen(false);
-  router.push('/chat');
-} catch (err: any) {
-  toast.error(err.response?.data?.error || 'Error renewing subscription');
-}
+      try {
+        const data = await renewSubscription(signature, solanaPublicKey, loginEmail);
+        toast.success('Subscription successfully renewed!');
+        localStorage.setItem('token', data.token);
+        setUser(data.user);
+        setIsSubscriptionModalOpen(false);
+        router.push('/chat');
+      } catch (err: any) {
+        toast.error(err.response?.data?.error || 'Error renewing subscription');
+      }
     } else if (isMobile) {
       localStorage.setItem('phantom_actual_action', 'subscription');
-      localStorage.setItem(
-        'phantom_subscription_data',
-        JSON.stringify({ email: loginEmail })
-      );
+      localStorage.setItem('phantom_subscription_data', JSON.stringify({ email: loginEmail }));
 
       if (!phantom.publicKey) {
         localStorage.setItem('phantom_delayed_action', 'subscription');
-        await phantom.connectWallet();
+        walletModal.setVisible(true);
+        return;
       } else {
         await phantom.processPayment();
       }
@@ -282,11 +277,10 @@ try {
     }
   };
 
- useEffect(() => {
-  phantom.resetPaymentStatus();
-  if (phantom.paymentStatus.error) toast.error(phantom.paymentStatus.error);
-}, []);
-
+  useEffect(() => {
+    phantom.resetPaymentStatus();
+    if (phantom.paymentStatus.error) toast.error(phantom.paymentStatus.error);
+  }, []);
 
   return (
     <>
