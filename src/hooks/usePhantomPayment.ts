@@ -14,6 +14,7 @@ interface PaymentStatus {
 }
 
 interface PaymentHookReturn {
+  wallet: any;
   // Connection states
   isConnected: boolean;
   isConnecting: boolean;
@@ -36,14 +37,14 @@ interface PaymentHookReturn {
 
 export const usePhantomPayment = (): PaymentHookReturn => {
   const { connection } = useConnection();
-  const { 
-    publicKey, 
-    connected, 
-    connecting, 
-    connect, 
-    disconnect, 
+  const {
+    wallet,
+    publicKey,
+    connected,
+    connecting,
+    connect,
+    disconnect,
     sendTransaction,
-    wallet
   } = useWallet();
 
   // Local states
@@ -51,49 +52,41 @@ export const usePhantomPayment = (): PaymentHookReturn => {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({
     signature: null,
     confirmed: false,
-    error: null
+    error: null,
   });
   const [isPhantomInstalled, setIsPhantomInstalled] = useState(false);
 
   // Check if Phantom is installed (works on desktop and mobile)
   useEffect(() => {
-    const checkPhantomInstalled = () => {
-      // Check for browser extension (desktop)
-      if (typeof window !== 'undefined') {
-        const isDesktopPhantom = !!(window as any).solana?.isPhantom;
-        // Mobile app detection - Phantom mobile injects differently
-        const isMobilePhantom = !!(window as any).phantom?.solana;
-        setIsPhantomInstalled(isDesktopPhantom || isMobilePhantom);
-      }
-    };
-
-    checkPhantomInstalled();
-
-    // Re-check when wallet adapter updates
-    if (wallet) {
-      setIsPhantomInstalled(true);
+    if (typeof window !== 'undefined') {
+      const isDesktopPhantom = !!(window as any).solana?.isPhantom;
+      const isMobilePhantom = !!(window as any).phantom?.solana;
+      setIsPhantomInstalled(isDesktopPhantom || isMobilePhantom);
     }
+    if (wallet) setIsPhantomInstalled(true);
   }, [wallet]);
 
-  // Connect wallet function with cross-platform support
+  // Connect wallet function
   const connectWallet = useCallback(async (): Promise<boolean> => {
+    if (!wallet) {
+      setPaymentStatus((prev) => ({
+        ...prev,
+        error: 'No wallet selected, please choose a wallet first.',
+      }));
+      return false;
+    }
     try {
-      if (!RECEIVER_WALLET) {
-        console.error('Receiver wallet not configured');
-        return false;
-      }
-
       await connect();
       return true;
     } catch (error) {
       console.error('Failed to connect wallet:', error);
-      setPaymentStatus(prev => ({
+      setPaymentStatus((prev) => ({
         ...prev,
-        error: 'Failed to connect wallet. Please try again.'
+        error: 'Failed to connect wallet. Please try again.',
       }));
       return false;
     }
-  }, [connect]);
+  }, [connect, wallet]);
 
   // Disconnect wallet
   const disconnectWallet = useCallback(async (): Promise<void> => {
@@ -108,7 +101,6 @@ export const usePhantomPayment = (): PaymentHookReturn => {
   // Get wallet balance
   const getBalance = useCallback(async (): Promise<number | null> => {
     if (!publicKey || !connection) return null;
-
     try {
       const balance = await connection.getBalance(publicKey);
       return balance / LAMPORTS_PER_SOL;
@@ -118,13 +110,14 @@ export const usePhantomPayment = (): PaymentHookReturn => {
     }
   }, [publicKey, connection]);
 
-  // Process payment with comprehensive error handling
+  // Process payment fixes WalletSendTransactionError with correct recentBlockhash & feePayer,
+  // and ensures no manual signing
   const processPayment = useCallback(async (customAmount?: number): Promise<boolean> => {
     if (!connected || !publicKey || !sendTransaction) {
       setPaymentStatus({
         signature: null,
         confirmed: false,
-        error: 'Wallet not connected'
+        error: 'Wallet not connected',
       });
       return false;
     }
@@ -133,7 +126,7 @@ export const usePhantomPayment = (): PaymentHookReturn => {
       setPaymentStatus({
         signature: null,
         confirmed: false,
-        error: 'Receiver wallet not configured'
+        error: 'Receiver wallet not configured',
       });
       return false;
     }
@@ -142,109 +135,89 @@ export const usePhantomPayment = (): PaymentHookReturn => {
     setPaymentStatus({
       signature: null,
       confirmed: false,
-      error: null
+      error: null,
     });
 
     try {
       const amount = customAmount || SOL_AMOUNT;
+      if (amount <= 0) throw new Error('Invalid payment amount');
+
       const lamports = amount * LAMPORTS_PER_SOL;
-
-      // Validate amount
-      if (amount <= 0) {
-        throw new Error('Invalid payment amount');
-      }
-
-      // Check if user has sufficient balance
       const balance = await getBalance();
-      if (balance !== null && balance < amount + 0.001) { // +0.001 for transaction fees
+      if (balance !== null && balance < amount + 0.001)
         throw new Error('Insufficient balance for transaction');
-      }
 
-      // Create receiver public key
-      let receiverPublicKey: PublicKey;
-      try {
-        receiverPublicKey = new PublicKey(RECEIVER_WALLET);
-      } catch {
-        throw new Error('Invalid receiver wallet address');
-      }
+      const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
-      // Create transaction
-      const transaction = new Transaction();
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey,
+          toPubkey: receiverPublicKey,
+          lamports: Math.floor(lamports),
+        }),
+      );
 
-      // Add transfer instruction
-      const transferInstruction = SystemProgram.transfer({
-        fromPubkey: publicKey,
-        toPubkey: receiverPublicKey,
-        lamports: Math.floor(lamports), // Ensure integer lamports
-      });
+      // MUST fetch recent blockhash and assign feePayer
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = publicKey;
 
-      transaction.add(transferInstruction);
-
-      // Send transaction
-      console.log(`Sending ${amount} SOL to ${RECEIVER_WALLET}...`);
+      // DO NOT sign transaction manually
+      // sendTransaction requests user signature and sends TX
       const signature = await sendTransaction(transaction, connection);
 
       setPaymentStatus({
         signature,
         confirmed: false,
-        error: null
+        error: null,
       });
 
-      // Confirm transaction
-      console.log('Transaction sent, waiting for confirmation...');
       await connection.confirmTransaction(signature, 'confirmed');
 
       setPaymentStatus({
         signature,
         confirmed: true,
-        error: null
+        error: null,
       });
 
       console.log(`Payment successful! Signature: ${signature}`);
       return true;
-
     } catch (error: any) {
-      const errorMessage = error?.message || 'Payment failed';
       console.error('Payment failed:', error);
-
       setPaymentStatus({
         signature: null,
         confirmed: false,
-        error: errorMessage
+        error: error?.message || 'Payment failed',
       });
-
       return false;
     } finally {
       setIsProcessingPayment(false);
     }
   }, [connected, publicKey, sendTransaction, connection, getBalance]);
 
-  // Reset payment status
+  // Reset helper
   const resetPaymentStatus = useCallback(() => {
     setPaymentStatus({
       signature: null,
       confirmed: false,
-      error: null
+      error: null,
     });
   }, []);
 
   return {
-    // Connection states
+    wallet,
     isConnected: connected,
     isConnecting: connecting,
     publicKey,
 
-    // Payment states
     isProcessingPayment,
     paymentStatus,
 
-    // Functions
     connectWallet,
     disconnectWallet,
     processPayment,
     resetPaymentStatus,
 
-    // Utility functions
     getBalance,
     isPhantomInstalled,
   };

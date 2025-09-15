@@ -8,13 +8,11 @@ import RegisterForm from './RegisterForm';
 import LoginModal from './LoginModal';
 import SubscriptionModal from './SubscriptionModal';
 
-import usePhantomPayment from '@/hooks/usePhantomPayment';
-
+import { usePhantomPayment } from '@/hooks/usePhantomPayment';
 import { checkUnique, registerUser, loginUser, renewSubscription } from '@/utils/api';
 import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import PhantomWalletConnector from '@/hooks/PhantomWalletConnector';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -296,7 +294,7 @@ export default function RegistrationForm() {
           <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
             CryptoChat
           </h1>
-          <PhantomWalletConnector/>
+
           {/* Tab Switcher */}
           <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
             <button
