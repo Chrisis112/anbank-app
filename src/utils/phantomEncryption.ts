@@ -30,9 +30,9 @@ export const decryptPayload = (
   dappPrivateKey: string
 ): any | null => {
   try {
-    if (!encryptedBase58 || !nonceBase58 || !dappPrivateKey) {
-      throw new Error('Missing required input');
-    }
+    if (!encryptedBase58) throw new Error('Encrypted payload is empty');
+    if (!nonceBase58) throw new Error('Nonce is empty');
+    if (!dappPrivateKey) throw new Error('dApp private key is empty');
 
     const encrypted = bs58.decode(encryptedBase58);
     const nonce = bs58.decode(nonceBase58);
@@ -68,15 +68,16 @@ export const decryptPayload = (
     }
 
     const decrypted = nacl.box.open(encrypted, nonce, phantomPubKey, dappPrivKey);
-
     if (!decrypted) {
       console.error('nacl.box.open returned null (decryption failed)');
+      console.groupEnd();
       return null;
     }
 
     const decryptedStr = decodeUTF8(decrypted);
     console.groupEnd();
     return JSON.parse(decryptedStr);
+
   } catch (error) {
     console.error('decryptPayload error:', error);
     return null;
