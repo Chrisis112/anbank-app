@@ -54,144 +54,47 @@ const abortControllerRef = useRef<AbortController | null>(null);
     setPromoCodeError(message);
   };
 
-  const handleRegisterSubmit = async (data: {
-    nickname: string;
-    email: string;
-    password: string;
-    confirmPassword: string;
-    role: Role;
-    promoCode: string | null;
-  }) => {
-    setRegisterLoading(true);
+const handleRegisterSubmit = async (data: {
+  nickname: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  role: Role;
+  promoCode: string | null;
+}) => {
+  setRegisterLoading(true);
 
-    if (data.password !== data.confirmPassword) {
-      toast.error('Passwords do not match');
-      setRegisterLoading(false);
-      return;
-    }
-
-    const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
-    if (emailExists) {
-      toast.error('Email is already in use');
-      setRegisterLoading(false);
-      return;
-    }
-    if (nicknameExists) {
-      toast.error('Nickname is already in use');
-      setRegisterLoading(false);
-      return;
-    }
-
-    try {
-      // Register with promo code (no payment)
-      if (data.promoCode) {
-        const result = await registerUser({
-          nickname: data.nickname,
-          email: data.email,
-          password: data.password,
-          role: data.role,
-          promoCode: data.promoCode,
-          solanaPublicKey: null,
-          paymentSignature: null,
-        });
-        setRegisterLoading(false);
-        if (result.success) {
-          localStorage.setItem('token', result.token || '');
-          setUser(result.user);
-          toast.success('Registration successful!');
-          router.push('/chat');
-        } else {
-          toast.error(result.error || 'Registration failed');
-        }
-        return;
-      }
-
-      // Mobile flow
-      if (isMobile) {
-        localStorage.setItem('phantom_pending_action', 'registration');
-        localStorage.setItem(
-          'phantom_registration_data',
-          JSON.stringify({
-            nickname: data.nickname,
-            email: data.email,
-            password: data.password,
-            role: data.role,
-            promoCode: data.promoCode,
-          }),
-        );
-
-        if (!phantom.phantomPublicKey) {
-          walletModal.setVisible(true);
-          setRegisterLoading(false);
-          toast.info('Please connect Phantom Wallet and retry registration.');
-          return;
-        }
-
-        const paymentSuccess = await phantom.processPayment();
-        if (!paymentSuccess) {
-          toast.error('Payment failed');
-          setRegisterLoading(false);
-          return;
-        }
-        setRegisterLoading(false);
-        toast.info('Payment in progress in Phantom app, please return here to continue.');
-        return;
-      }
-
-      // Desktop flow
-if (!phantom.isConnected) {
-  if (!phantom.phantomPublicKey) {
-    walletModal.setVisible(true);
+  if (data.password !== data.confirmPassword) {
+    toast.error('Passwords do not match');
     setRegisterLoading(false);
-    toast.info('Connect your Phantom wallet first');
     return;
   }
 
-  
-  // Попытка подключиться к Phantom расширению
-const connected = await phantom.connectWallet();
-if (!connected) {
-  setRegisterLoading(false);
-  toast.error('Failed to connect Phantom wallet');
-  return;
-}
-}
+  const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
+  if (emailExists) {
+    toast.error('Email is already in use');
+    setRegisterLoading(false);
+    return;
+  }
+  if (nicknameExists) {
+    toast.error('Nickname is already in use');
+    setRegisterLoading(false);
+    return;
+  }
 
-
-const resultPayment = await phantom.processPayment();
-if (!resultPayment) {
-  toast.error('Payment failed');
-  setRegisterLoading(false);
-  return;
-}
-
-// Получаем signature после успешной оплаты
-const paymentSignature = phantom.paymentStatus.signature;
-if (!paymentSignature) {
-  toast.error('Payment signature unavailable');
-  setRegisterLoading(false);
-  return;
-}
-
-const solanaPublicKey = phantom.phantomPublicKey;
-if (!solanaPublicKey) {
-  toast.error('Failed to get public key from wallet');
-  setRegisterLoading(false);
-  return;
-}
-
-// Потом вызываете вашу регистрацию
-const result = await registerUser({
-  nickname: data.nickname,
-  email: data.email,
-  password: data.password,
-  role: data.role,
-  solanaPublicKey,
-  paymentSignature,
-  promoCode: null,
-});
+  try {
+    // Register with promo code (no payment)
+    if (data.promoCode) {
+      const result = await registerUser({
+        nickname: data.nickname,
+        email: data.email,
+        password: data.password,
+        role: data.role,
+        promoCode: data.promoCode,
+        solanaPublicKey: null,
+        paymentSignature: null,
+      });
       setRegisterLoading(false);
-
       if (result.success) {
         localStorage.setItem('token', result.token || '');
         setUser(result.user);
@@ -200,12 +103,106 @@ const result = await registerUser({
       } else {
         toast.error(result.error || 'Registration failed');
       }
-    } catch (error) {
-      console.error('Registration error:', error);
-      setRegisterLoading(false);
-      toast.error('Registration failed');
+      return;
     }
-  };
+
+    // Mobile flow: connect Phantom Wallet first if not connected
+    if (isMobile) {
+      localStorage.setItem('phantom_pending_action', 'registration');
+      localStorage.setItem(
+        'phantom_registration_data',
+        JSON.stringify({
+          nickname: data.nickname,
+          email: data.email,
+          password: data.password,
+          role: data.role,
+          promoCode: data.promoCode,
+        }),
+      );
+
+      if (!phantom.phantomPublicKey) {
+        walletModal.setVisible(true);
+        setRegisterLoading(false);
+        toast.info('Please connect Phantom Wallet and retry registration.');
+        return;
+      }
+
+      const paymentSuccess = await phantom.processPayment();
+      if (!paymentSuccess) {
+        toast.error('Payment failed');
+        setRegisterLoading(false);
+        return;
+      }
+      setRegisterLoading(false);
+      toast.info('Payment in progress in Phantom app, please return here to continue.');
+      return;
+    }
+
+    // Desktop flow: connect if needed
+    if (!phantom.isConnected) {
+      if (!phantom.phantomPublicKey) {
+        walletModal.setVisible(true);
+        setRegisterLoading(false);
+        toast.info('Connect your Phantom wallet first');
+        return;
+      }
+      const connected = await phantom.connectWallet();
+      if (!connected) {
+        setRegisterLoading(false);
+        toast.error('Failed to connect Phantom wallet');
+        return;
+      }
+    }
+
+    const resultPayment = await phantom.processPayment();
+    if (!resultPayment) {
+      toast.error('Payment failed');
+      setRegisterLoading(false);
+      return;
+    }
+
+    const paymentSignature = phantom.paymentStatus.signature;
+    if (!paymentSignature) {
+      toast.error('Payment signature unavailable');
+      setRegisterLoading(false);
+      return;
+    }
+
+    const solanaPublicKey = phantom.phantomPublicKey;
+    if (!solanaPublicKey) {
+      toast.error('Failed to get public key from wallet');
+      setRegisterLoading(false);
+      return;
+    }
+
+    // Call backend registration with payment info
+    const result = await registerUser({
+      nickname: data.nickname,
+      email: data.email,
+      password: data.password,
+      role: data.role,
+      solanaPublicKey,
+      paymentSignature,
+      promoCode: null,
+    });
+
+    setRegisterLoading(false);
+
+    if (result.success) {
+      localStorage.setItem('token', result.token || '');
+      setUser(result.user);
+      toast.success('Registration successful!');
+      router.push('/chat');
+    } else {
+      toast.error(result.error || 'Registration failed');
+    }
+  } catch (error) {
+    console.error('Registration error:', error);
+    setRegisterLoading(false);
+    toast.error('Registration failed');
+  }
+};
+
 
   const handleLoginSubmit = async (email: string, password: string) => {
     setLoginLoading(true);
