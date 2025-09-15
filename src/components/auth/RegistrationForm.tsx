@@ -249,7 +249,6 @@ export default function RegistrationForm() {
 
       const signature = phantom.paymentStatus.signature;
       if (!signature) {
-        toast.error('Payment failed - no signature');
         return;
       }
 
