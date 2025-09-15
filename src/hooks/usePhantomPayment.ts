@@ -162,8 +162,8 @@ export const usePhantomPayment = (): PaymentHookReturn => {
 transaction.recentBlockhash = latestBlockhash.blockhash;
 transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
 transaction.feePayer = publicKey!;
-      // DO NOT sign transaction manually
-      // sendTransaction requests user signature and sends TX
+console.log('User publicKey:', publicKey?.toBase58());
+console.log('Transaction feePayer:', transaction.feePayer?.toBase58());
       const signature = await sendTransaction(transaction, connection);
 
       setPaymentStatus({
