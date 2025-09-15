@@ -158,10 +158,10 @@ export const usePhantomPayment = (): PaymentHookReturn => {
       );
 
       // MUST fetch recent blockhash and assign feePayer
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = publicKey;
-
+ const latestBlockhash = await connection.getLatestBlockhash();
+transaction.recentBlockhash = latestBlockhash.blockhash;
+transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
+transaction.feePayer = publicKey!;
       // DO NOT sign transaction manually
       // sendTransaction requests user signature and sends TX
       const signature = await sendTransaction(transaction, connection);
