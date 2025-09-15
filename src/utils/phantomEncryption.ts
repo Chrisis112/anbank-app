@@ -23,68 +23,62 @@ export const encryptPayload = (
   return bs58.encode(encrypted);
 };
 
-export function decryptPayload(
+export const decryptPayload = (
   encryptedBase58: string,
   nonceBase58: string,
   phantomPublicKey: string,
   dappPrivateKey: string
-): any | null {
+): any | null => {
   try {
-    if (!encryptedBase58) throw new Error('Encrypted payload is empty');
-    if (!nonceBase58) throw new Error('Nonce is empty');
-    if (!dappPrivateKey) throw new Error('dApp private key is empty');
+    if (!encryptedBase58 || !nonceBase58 || !dappPrivateKey) {
+      throw new Error('Missing required input');
+    }
 
     const encrypted = bs58.decode(encryptedBase58);
     const nonce = bs58.decode(nonceBase58);
     const dappPrivKey = bs58.decode(dappPrivateKey);
 
     console.group('decryptPayload debug');
-    console.log('Encrypted (base58) start:', encryptedBase58.slice(0, 20) + '...');
-    console.log('Encrypted (hex) start:', Buffer.from(encrypted).slice(0, 20).toString('hex') + '...');
+    console.log('Encrypted (base58) prefix:', encryptedBase58.slice(0, 20) + '...');
+    console.log('Encrypted length:', encrypted.length);
     console.log('Nonce (base58):', nonceBase58);
-    console.log('Nonce (hex):', Buffer.from(nonce).toString('hex'));
     console.log('Nonce length:', nonce.length);
-    console.log('dApp PrivateKey (base58) start:', dappPrivateKey.slice(0, 20) + '...');
-    console.log('dApp PrivateKey (hex):', Buffer.from(dappPrivKey).toString('hex'));
-    console.log('dApp PrivateKey length:', dappPrivKey.length);
+    console.log('DApp private key (base58 prefix):', dappPrivateKey.slice(0, 20) + '...');
+    console.log('DApp private key length:', dappPrivKey.length);
 
     let phantomPubKey: Uint8Array;
     if (phantomPublicKey) {
       phantomPubKey = bs58.decode(phantomPublicKey);
-      console.log('Phantom PublicKey (base58) start:', phantomPublicKey.slice(0, 20) + '...');
-      console.log('Phantom PublicKey (hex):', Buffer.from(phantomPubKey).toString('hex'));
-      console.log('Phantom PublicKey length:', phantomPubKey.length);
+      console.log('Phantom public key (base58 prefix):', phantomPublicKey.slice(0, 20) + '...');
+      console.log('Phantom public key length:', phantomPubKey.length);
     } else {
-      const dappPubKey = localStorage.getItem('phantom_dapp_public_key');
-      if (!dappPubKey) throw new Error('Missing dApp public key in localStorage');
-      phantomPubKey = bs58.decode(dappPubKey);
-      console.log('Fallback to dApp PublicKey (base58) start:', dappPubKey.slice(0, 20) + '...');
-      console.log('Fallback to dApp PublicKey (hex):', Buffer.from(phantomPubKey).toString('hex'));
-      console.log('Fallback to dApp PublicKey length:', phantomPubKey.length);
+      const fallbackPubKeyBase58 = localStorage.getItem('phantom_dapp_public_key');
+      if (!fallbackPubKeyBase58) {
+        throw new Error('Missing fallback public key');
+      }
+      phantomPubKey = bs58.decode(fallbackPubKeyBase58);
+      console.log('Fallback (dApp) public key (base58 prefix):', fallbackPubKeyBase58.slice(0, 20) + '...');
+      console.log('Fallback public key length:', phantomPubKey.length);
     }
 
-    if (phantomPubKey.length !== 32) {
-      throw new Error(`Invalid public key length: ${phantomPubKey.length}`);
-    }
-    if (dappPrivKey.length !== 32) {
-      throw new Error(`Invalid private key length: ${dappPrivKey.length}`);
-    }
-    if (nonce.length !== 24) {
-      throw new Error(`Invalid nonce length: ${nonce.length}`);
+    if (phantomPubKey.length !== 32 || dappPrivKey.length !== 32 || nonce.length !== 24) {
+      throw new Error(
+        `Invalid key or nonce lengths: pubKey=${phantomPubKey.length}, privKey=${dappPrivKey.length}, nonce=${nonce.length}`
+      );
     }
 
     const decrypted = nacl.box.open(encrypted, nonce, phantomPubKey, dappPrivKey);
+
     if (!decrypted) {
       console.error('nacl.box.open returned null (decryption failed)');
       return null;
     }
 
-    const decoded = decodeUTF8(decrypted);
+    const decryptedStr = decodeUTF8(decrypted);
     console.groupEnd();
-    return JSON.parse(decoded);
-
+    return JSON.parse(decryptedStr);
   } catch (error) {
     console.error('decryptPayload error:', error);
     return null;
   }
-}
+};
