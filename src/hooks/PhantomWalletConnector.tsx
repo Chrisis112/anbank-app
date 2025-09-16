@@ -1,159 +1,149 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
-import {
-  SolanaMobileWalletAdapter,
-  createDefaultAddressSelector,
-  AuthorizationResultCache,
-  LocalSolanaMobileWalletAdapter,
-} from '@solana-mobile/wallet-adapter-mobile';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
+import { PublicKey } from '@solana/web3.js';
+import { decryptPayload } from '@/utils/decryptPayload';
+import { encryptPayload } from '@/utils/encryptPayload';
+import { buildUrl } from '@/utils/buildUrl';
 
-class SimpleAuthorizationResultCache implements AuthorizationResultCache {
-  async get() { return null; }
-  async set() {}
-  async delete() {}
-  async clear() {}
-}
+const onConnectRedirectLink = typeof window !== 'undefined'
+  ? `${window.location.origin}/onConnect`
+  : '/onConnect';
+
+const onDisconnectRedirectLink = typeof window !== 'undefined'
+  ? `${window.location.origin}/onDisconnect`
+  : '/onDisconnect';
 
 export default function PhantomWalletConnector() {
-  const { wallet, connected, publicKey, connect, disconnect } = useWallet();
-  const walletModal = useWalletModal();
-
+  const [phantomWalletPublicKey, setPhantomWalletPublicKey] = useState<PublicKey | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
+  const [dappKeyPair] = useState(nacl.box.keyPair());
+  const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
+  const [session, setSession] = useState<string>();
+  const [deepLink, setDeepLink] = useState<string>("");
 
-  const mobileWalletAdapter = useMemo(() => new SolanaMobileWalletAdapter({
-    appIdentity: { 
-      name: 'CryptoChat',
-      uri: typeof window !== 'undefined' ? window.location.origin : undefined
-    },
-    authorizationResultCache: new SimpleAuthorizationResultCache(),
-    addressSelector: createDefaultAddressSelector(),
-    cluster: 'mainnet-beta', // или 'devnet' в зависимости от сети
-    onWalletNotFound: async (_adapter: LocalSolanaMobileWalletAdapter) => {
-      alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
+  // Для веба слушаем изменения URL через popstate и initial загрузку
+  useEffect(() => {
+    const handleDeepLink = () => {
+      setDeepLink(window.location.href);
+    };
+
+    handleDeepLink(); // initial check
+
+    window.addEventListener('popstate', handleDeepLink);
+    return () => {
+      window.removeEventListener('popstate', handleDeepLink);
+    };
+  }, []);
+
+  // Обработка входящих deeplinks
+  useEffect(() => {
+    if (!deepLink) return;
+
+    const url = new URL(deepLink);
+    const params = url.searchParams;
+
+    // Ошибка от Phantom
+    if (params.get("errorCode")) {
+      const error = Object.fromEntries([...params]);
+      const message = error?.errorMessage ?? JSON.stringify(error, null, 2);
+      console.log("Phantom error:", message);
+      toast.error(`Phantom error: ${message}`);
+      return;
     }
-  }), []);
 
-  const wallets = useMemo(() => [
-    new PhantomWalletAdapter(),
-    mobileWalletAdapter,
-  ], [mobileWalletAdapter]);
+    // Обработка ответа connect
+    if (/onConnect/.test(url.pathname)) {
+      const sharedSecretDapp = nacl.box.before(
+        bs58.decode(params.get("phantom_encryption_public_key")!),
+        dappKeyPair.secretKey
+      );
+
+      const connectData = decryptPayload(
+        params.get("data")!,
+        params.get("nonce")!,
+        sharedSecretDapp
+      );
+
+      setSharedSecret(sharedSecretDapp);
+      setSession(connectData.session);
+      setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
+
+      console.log(`Connected to ${connectData.public_key.toString()}`);
+      toast.success('Phantom Wallet подключен!');
+    }
+
+    // Обработка отключения
+    if (/onDisconnect/.test(url.pathname)) {
+      setPhantomWalletPublicKey(null);
+      setSession(undefined);
+      setSharedSecret(undefined);
+      console.log("disconnected");
+      toast.info('Phantom Wallet отключен');
+    }
+  }, [deepLink, dappKeyPair.secretKey]);
 
   const handleConnectWallet = useCallback(async () => {
-    if (connected) {
+    if (phantomWalletPublicKey) {
       toast.info('Phantom Wallet уже подключен');
-      return;
-    }
-
-    const isMobile = typeof navigator !== 'undefined' &&
-      /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-
-    if (isMobile) {
-      const returnUrl = encodeURIComponent(window.location.href);
-      const phantomDeepLink = `https://phantom.app/ul/v1/connect?app_url=${returnUrl}`;
-
-      window.location.href = phantomDeepLink;
-
-      toast.info('Пожалуйста, откройте Phantom для подключения кошелька');
-      return;
-    }
-
-    if (!wallet) {
-      walletModal.setVisible(true);
       return;
     }
 
     setIsConnecting(true);
     try {
-      await connect();
-      toast.success('Phantom Wallet успешно подключен!');
+      const params = new URLSearchParams({
+        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+        cluster: "mainnet-beta", // либо devnet
+        app_url: typeof window !== 'undefined' ? window.location.origin : "https://cryptochat.app",
+        redirect_link: onConnectRedirectLink,
+      });
+
+      const url = buildUrl("connect", params);
+      window.open(url, "_blank");
     } catch (error) {
-      console.error('Ошибка подключения к Phantom:', error);
-      toast.error('Не удалось подключить Phantom Wallet');
+      console.error('Ошибка при открытии Phantom:', error);
+      toast.error('Не удалось открыть Phantom Wallet');
     } finally {
       setIsConnecting(false);
     }
-  }, [connected, wallet, walletModal, connect]);
-
-  useEffect(() => {
-    const walletAny = wallet as any;
-    console.log('Active wallet:', walletAny?.name);
-  }, [wallet]);
+  }, [phantomWalletPublicKey, dappKeyPair.publicKey]);
 
   const handleDisconnectWallet = useCallback(async () => {
+    if (!session || !sharedSecret) {
+      toast.error('Нет активной сессии для отключения');
+      return;
+    }
+
     try {
-      await disconnect();
-      toast.info('Phantom Wallet отключен');
-      setPhantomPublicKey(null);
+      const payload = { session };
+      const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
+
+      const params = new URLSearchParams({
+        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+        nonce: bs58.encode(nonce),
+        redirect_link: onDisconnectRedirectLink,
+        payload: bs58.encode(encryptedPayload),
+      });
+
+      const url = buildUrl("disconnect", params);
+      window.open(url, "_blank");
     } catch (error) {
       console.error('Ошибка отключения Phantom:', error);
+      toast.error('Не удалось отключить Phantom Wallet');
     }
-  }, [disconnect]);
+  }, [session, sharedSecret, dappKeyPair.publicKey]);
 
-  useEffect(() => {
-    if (connected && publicKey) {
-      setPhantomPublicKey(publicKey.toBase58());
-      console.log('Wallet connected:', publicKey.toBase58());
-    } else {
-      setPhantomPublicKey(null);
-      console.log('Wallet disconnected or not connected');
-    }
-  }, [connected, publicKey]);
 
-  useEffect(() => {
-    if (!wallet) return;
-
-    const walletAny = wallet as any;
-
-    if (typeof walletAny.on === 'function' && typeof walletAny.off === 'function') {
-      const onConnect = () => {
-        if (walletAny.publicKey) setPhantomPublicKey(walletAny.publicKey.toBase58());
-        console.log('Wallet connect event');
-      };
-
-      const onDisconnect = () => {
-        setPhantomPublicKey(null);
-        console.log('Wallet disconnect event');
-      };
-
-      walletAny.on('connect', onConnect);
-      walletAny.on('disconnect', onDisconnect);
-
-      return () => {
-        walletAny.off('connect', onConnect);
-        walletAny.off('disconnect', onDisconnect);
-      };
-    }
-  }, [wallet]);
-
-  return (
-    <div style={{ maxWidth: 400, margin: 'auto', padding: 20 }}>
-      <h3>Phantom Wallet Connection</h3>
-      <p>Status: {connected ? 'Connected' : 'Disconnected'}</p>
-      <p>Public Key: {phantomPublicKey ?? '—'}</p>
-
-      {!connected && (
-        <button
-          onClick={handleConnectWallet}
-          disabled={isConnecting}
-          style={{ padding: '8px 16px', marginBottom: 10 }}
-        >
-          {isConnecting ? 'Connecting...' : 'Connect Phantom Wallet'}
-        </button>
-      )}
-
-      {connected && (
-        <button
-          onClick={handleDisconnectWallet}
-          style={{ padding: '8px 16px', backgroundColor: '#f44336', color: 'white' }}
-        >
-          Disconnect Wallet
-        </button>
-      )}
-    </div>
-  );
+  return {
+    phantomWalletPublicKey,
+    isConnected: !!phantomWalletPublicKey,
+    isConnecting,
+    session,
+    sharedSecret,
+    dappKeyPair,
+    connectWallet: handleConnectWallet,
+    disconnectWallet: handleDisconnectWallet,
+  };
 }

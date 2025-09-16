@@ -1,243 +1,117 @@
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Connection } from '@solana/web3.js';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { Transaction, PublicKey, SystemProgram, LAMPORTS_PER_SOL, Connection, clusterApiUrl } from '@solana/web3.js';
 
-// Environment config
-const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
+import { toast } from 'react-toastify';
+import { encryptPayload } from '@/utils/encryptPayload';
+import { buildUrl } from '@/utils/buildUrl';
+
 const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.36');
+const connection = new Connection(clusterApiUrl("mainnet-beta"));
 
-interface PaymentStatus {
-  signature: string | null;
-  confirmed: boolean;
-  error: string | null;
+const onSignAndSendTransactionRedirectLink = typeof window !== 'undefined'
+  ? `${window.location.origin}/onSignAndSendTransaction`
+  : '/onSignAndSendTransaction';
+interface PaymentParams {
+  phantomWalletPublicKey: PublicKey | null;
+  session: string | undefined;
+  sharedSecret: Uint8Array | undefined;
+  dappKeyPair: nacl.BoxKeyPair;
 }
 
-interface PaymentHookReturn {
-  wallet: any;
-  isConnected: boolean;
-  isConnecting: boolean;
-  publicKey: PublicKey | null;
-
-  isProcessingPayment: boolean;
-  paymentStatus: PaymentStatus;
-
-  connectWallet: () => Promise<boolean>;
-  disconnectWallet: () => Promise<void>;
-  processPayment: (customAmount?: number) => Promise<string | null>;
-  resetPaymentStatus: () => void;
-
-  getBalance: () => Promise<number | null>;
-  isPhantomInstalled: boolean;
-}
-
-// Helper: direct Phantom wallet payment for mobile (bypassing wallet adapter)
-async function processPaymentDirectly(
-  transaction: Transaction,
-  connection: Connection,
-  publicKey: PublicKey
-): Promise<string> {
-  //@ts-ignore
-  const provider = (window as any).solana;
-  if (!provider?.isPhantom) throw new Error('Phantom wallet not available');
-
-  if (!provider.isConnected) {
-    await provider.connect();
-  }
-
-  const latestBlockhash = await connection.getLatestBlockhash();
-
-  transaction.recentBlockhash = latestBlockhash.blockhash;
-  transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
-  transaction.feePayer = publicKey;
-
-  const signedTx = await provider.signTransaction(transaction);
-  const serializedTx = signedTx.serialize();
-
-  const signature = await connection.sendRawTransaction(serializedTx);
-
-  await connection.confirmTransaction(
-    {
-      signature,
-      blockhash: latestBlockhash.blockhash,
-      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-    },
-    'confirmed'
-  );
-
-  return signature;
-}
-
-export const usePhantomPayment = (): PaymentHookReturn => {
-  const { connection } = useConnection();
-  const {
-    wallet,
-    publicKey,
-    connected,
-    connecting,
-    connect,
-    disconnect,
-    sendTransaction,
-  } = useWallet();
-
+export const usePhantomPayment = () => {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({
-    signature: null,
-    confirmed: false,
-    error: null,
-  });
-  const [isPhantomInstalled, setIsPhantomInstalled] = useState(false);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const isDesktopPhantom = !!(window as any).solana?.isPhantom;
-      const isMobilePhantom = !!(window as any).phantom?.solana;
-      setIsPhantomInstalled(isDesktopPhantom || isMobilePhantom);
-    }
-    if (wallet) setIsPhantomInstalled(true);
-  }, [wallet]);
+  const processPayment = useCallback(async (
+    params: PaymentParams,
+    customAmount?: number
+  ): Promise<string | null> => {
+    const { phantomWalletPublicKey, session, sharedSecret, dappKeyPair } = params;
 
-  const connectWallet = useCallback(async (): Promise<boolean> => {
-    if (!wallet) {
-      setPaymentStatus((prev) => ({
-        ...prev,
-        error: 'No wallet selected, please choose a wallet first.',
-      }));
-      return false;
-    }
-    try {
-      await connect();
-      return true;
-    } catch (error) {
-      console.error('Failed to connect wallet:', error);
-      setPaymentStatus((prev) => ({
-        ...prev,
-        error: 'Failed to connect wallet. Please try again.',
-      }));
-      return false;
-    }
-  }, [connect, wallet]);
-
-  const disconnectWallet = useCallback(async (): Promise<void> => {
-    try {
-      await disconnect();
-      resetPaymentStatus();
-    } catch (error) {
-      console.error('Failed to disconnect wallet:', error);
-    }
-  }, [disconnect]);
-
-  const getBalance = useCallback(async (): Promise<number | null> => {
-    if (!publicKey || !connection) return null;
-    try {
-      const balance = await connection.getBalance(publicKey);
-      return balance / LAMPORTS_PER_SOL;
-    } catch (error) {
-      console.error('Failed to get balance:', error);
+    if (!phantomWalletPublicKey || !session || !sharedSecret) {
+      toast.error('Phantom Wallet не подключен');
       return null;
     }
-  }, [publicKey, connection]);
 
-  const processPayment = useCallback(
-    async (customAmount?: number): Promise<string | null> => {
-      if (!connected || !publicKey) {
-        setPaymentStatus({ signature: null, confirmed: false, error: 'Wallet not connected' });
-        return null;
+    if (!RECEIVER_WALLET) {
+      toast.error('Адрес получателя не настроен');
+      return null;
+    }
+
+    setIsProcessingPayment(true);
+
+    try {
+      const amount = customAmount || SOL_AMOUNT;
+      if (amount <= 0) {
+        throw new Error('Некорректная сумма платежа');
       }
 
-      if (!RECEIVER_WALLET) {
-        setPaymentStatus({ signature: null, confirmed: false, error: 'Receiver wallet not configured' });
-        return null;
+      const lamports = amount * LAMPORTS_PER_SOL;
+      
+      // Проверка баланса
+      const balance = await connection.getBalance(phantomWalletPublicKey);
+      if (balance < lamports + 5000) { // 5000 ламportов на комиссию
+        throw new Error('Недостаточно средств на балансе');
       }
 
-      setIsProcessingPayment(true);
-      setPaymentStatus({ signature: null, confirmed: false, error: null });
+      const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
-      try {
-        const amount = customAmount || SOL_AMOUNT;
-        if (amount <= 0) throw new Error('Invalid payment amount');
+      // Создание транзакции
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: phantomWalletPublicKey,
+          toPubkey: receiverPublicKey,
+          lamports: Math.floor(lamports),
+        })
+      );
 
-        const lamports = amount * LAMPORTS_PER_SOL;
-        const balance = await getBalance();
-        if (balance !== null && balance < amount + 0.001) throw new Error('Insufficient balance');
+      const latestBlockhash = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = latestBlockhash.blockhash;
+      transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
+      transaction.feePayer = phantomWalletPublicKey;
 
-        const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
+      // Сериализация транзакции
+      const serializedTransaction = transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false,
+      });
 
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({
-            fromPubkey: publicKey,
-            toPubkey: receiverPublicKey,
-            lamports: Math.floor(lamports),
-          }),
-        );
+      const payload = {
+        session,
+        transaction: bs58.encode(serializedTransaction),
+      };
 
-        const latestBlockhash = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = latestBlockhash.blockhash;
-        transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
-        transaction.feePayer = publicKey;
+      const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
 
-        console.log('User publicKey:', publicKey?.toBase58());
-        console.log('Transaction feePayer:', transaction.feePayer?.toBase58());
+      const params = new URLSearchParams({
+        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+        nonce: bs58.encode(nonce),
+        redirect_link: onSignAndSendTransactionRedirectLink,
+        payload: bs58.encode(encryptedPayload),
+      });
 
-        const isMobile = typeof window !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-
-        let signature: string;
-
-        if (isMobile && wallet && 'signTransaction' in wallet) {
-          console.log('Using direct Phantom connection for mobile wallet');
-          signature = await processPaymentDirectly(transaction, connection, publicKey);
-        } else {
-          console.log('Using wallet adapter sendTransaction for desktop');
-          signature = await sendTransaction(transaction, connection);
-        }
-
-        setPaymentStatus({ signature, confirmed: false, error: null });
-
-        await connection.confirmTransaction(
-          {
-            signature,
-            blockhash: latestBlockhash.blockhash,
-            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-          },
-          'confirmed',
-        );
-
-        setPaymentStatus({ signature, confirmed: true, error: null });
-
-        console.log(`Payment successful! Signature: ${signature}`);
-        return signature;
-      } catch (error: any) {
-        console.error('Payment failed:', error);
-        setPaymentStatus({ signature: null, confirmed: false, error: error?.message || 'Payment failed' });
-        return null;
-      } finally {
-        setIsProcessingPayment(false);
-      }
-    },
-    [connected, publicKey, sendTransaction, connection, wallet, getBalance],
-  );
-
-  const resetPaymentStatus = useCallback(() => {
-    setPaymentStatus({ signature: null, confirmed: false, error: null });
+      const url = buildUrl("signAndSendTransaction", params);
+      
+window.open(url, "_blank");
+      
+      toast.info('Подтвердите транзакцию в Phantom Wallet');
+      
+      // Возвращаем специальное значение, указывающее что транзакция отправлена на подпись
+      return 'TRANSACTION_SENT_FOR_SIGNING';
+      
+    } catch (error: any) {
+      console.error('Ошибка обработки платежа:', error);
+      toast.error(`Ошибка платежа: ${error?.message || 'Неизвестная ошибка'}`);
+      return null;
+    } finally {
+      setIsProcessingPayment(false);
+    }
   }, []);
 
   return {
-    wallet,
-    isConnected: connected,
-    isConnecting: connecting,
-    publicKey,
-
-    isProcessingPayment,
-    paymentStatus,
-
-    connectWallet,
-    disconnectWallet,
     processPayment,
-    resetPaymentStatus,
-
-    getBalance,
-    isPhantomInstalled,
+    isProcessingPayment,
   };
 };
-
-export default usePhantomPayment;
