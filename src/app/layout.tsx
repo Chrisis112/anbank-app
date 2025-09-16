@@ -5,16 +5,18 @@ import '../styles/crypto-theme.css';
 import '../styles/animations.css';
 import '../styles/components.css';
 
-import React, { ReactNode, useMemo } from 'react';
-
 import '@solana/wallet-adapter-react-ui/styles.css';
+import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import { WalletProvider } from '@solana/wallet-adapter-react';
+import { PhantomWalletAdapter, SolflareWalletAdapter, TorusWalletAdapter } from '@solana/wallet-adapter-wallets';
 
-interface RootLayoutProps {
-  children: ReactNode;
-}
-
-export default function RootLayout({ children }: RootLayoutProps) {
-  const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'mainnet-beta';
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Создаем массив кошельков
+  const wallets = [
+    new PhantomWalletAdapter(),
+    new SolflareWalletAdapter({ network: WalletAdapterNetwork.Mainnet }),
+    new TorusWalletAdapter(),
+  ];
 
   return (
     <html lang="en">
@@ -24,9 +26,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
           href="https://fonts.googleapis.com/css?family=Orbitron:wght@500;700&display=swap"
           rel="stylesheet"
         />
-        {/* При необходимости можно добавить мета-теги для темы PWA */}
         <meta name="theme-color" content="#0057ff" />
-        {/* Регистрация service worker */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -38,7 +38,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
         />
       </head>
       <body>
-              {children}
+        <WalletProvider wallets={wallets} autoConnect>
+          {children}
+        </WalletProvider>
       </body>
     </html>
   );

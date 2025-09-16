@@ -43,6 +43,8 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
     return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
   }, [network]);
 
+  
+
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({
       appIdentity: {
