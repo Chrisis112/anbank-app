@@ -9,7 +9,7 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { WalletProvider } from '@solana/wallet-adapter-react';
 import { PhantomWalletAdapter, SolflareWalletAdapter, TorusWalletAdapter } from '@solana/wallet-adapter-wallets';
-
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Создаем массив кошельков
   const wallets = [
@@ -38,8 +38,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        
         <WalletProvider wallets={wallets} autoConnect>
+          <WalletModalProvider>
           {children}
+          </WalletModalProvider>
         </WalletProvider>
       </body>
     </html>
