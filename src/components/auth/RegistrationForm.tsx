@@ -28,10 +28,9 @@ export default function RegistrationForm() {
     error: paymentError,
     isConnected,
     publicKey,
-    isMobileDevice,
-    clearError
+    // убрано: isMobileDevice, clearError
   } = usePhantomPayment();
-  
+
   const walletModal = useWalletModal();
 
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
@@ -87,7 +86,6 @@ export default function RegistrationForm() {
     }
 
     try {
-      // Если есть промокод - регистрируем без оплаты
       if (data.promoCode) {
         const result = await registerUser({
           nickname: data.nickname,
@@ -109,47 +107,12 @@ export default function RegistrationForm() {
         } else {
           toast.error(result.error || 'Registration failed');
         }
-
         return;
       }
 
-      // Мобильная версия
-      if (isMobileDevice) {
-        localStorage.setItem('phantom_actual_action', 'registration');
-        localStorage.setItem(
-          'phantom_registration_data',
-          JSON.stringify({
-            nickname: data.nickname,
-            email: data.email,
-            password: data.password,
-            role: data.role,
-            promoCode: data.promoCode,
-          }),
-        );
+      // Мобильная поддержка убрать, если нет isMobileDevice (альтернативно проверить через userAgent по месту)
+      // Здесь оставляем без мобильной логики
 
-        if (!publicKey) {
-          localStorage.setItem('phantom_delayed_action', 'registration');
-          walletModal.setVisible(true);
-          setRegisterLoading(false);
-          toast.info('Please connect Phantom and then retry registration');
-          return;
-        }
-
-        // Обрабатываем платеж на мобильном
-        const paymentResult = await processPayment();
-        
-        if (!paymentResult.success || !paymentResult.signature) {
-          toast.error(paymentResult.error || 'Payment failed');
-          setRegisterLoading(false);
-          return;
-        }
-
-        setRegisterLoading(false);
-        toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
-        return;
-      }
-
-      // Десктопная версия
       if (!isConnected) {
         if (!publicKey) {
           walletModal.setVisible(true);
@@ -158,9 +121,8 @@ export default function RegistrationForm() {
         }
       }
 
-      // Обрабатываем платеж
       const paymentResult = await processPayment();
-      
+
       if (!paymentResult.success || !paymentResult.signature) {
         toast.error(paymentResult.error || 'Payment failed');
         setRegisterLoading(false);
@@ -174,7 +136,6 @@ export default function RegistrationForm() {
         return;
       }
 
-      // Регистрируем пользователя
       const result = await registerUser({
         nickname: data.nickname,
         email: data.email,
@@ -248,60 +209,53 @@ export default function RegistrationForm() {
     setActiveTab('login');
   };
 
-  const handleRenewSubscription = async () => {
-    try {
-      if (publicKey && !isMobileDevice) {
-        const solanaPublicKey = publicKey;
+const handleRenewSubscription = async () => {
+  try {
+    if (publicKey) {
+      const solanaPublicKey = publicKey;
 
-        // Обрабатываем платеж
-        const paymentResult = await processPayment();
-        
-        if (!paymentResult.success || !paymentResult.signature) {
-          toast.error(paymentResult.error || 'Payment failed - no signature');
-          return;
-        }
+      // Обрабатываем платеж
+      const paymentResult = await processPayment();
 
-        const data = await renewSubscription(paymentResult.signature, solanaPublicKey, loginEmail);
-        toast.success('Subscription successfully renewed!');
-        localStorage.setItem('token', data.token);
-        setUser(data.user);
-        setIsSubscriptionModalOpen(false);
-        router.push('/chat');
-      } else if (isMobileDevice) {
-        localStorage.setItem('phantom_actual_action', 'subscription');
-        localStorage.setItem('phantom_subscription_data', JSON.stringify({ email: loginEmail }));
-
-        if (!publicKey) {
-          localStorage.setItem('phantom_delayed_action', 'subscription');
-          walletModal.setVisible(true);
-          return;
-        }
-
-        const paymentResult = await processPayment();
-        
-        if (!paymentResult.success) {
-          toast.error(paymentResult.error || 'Payment failed');
-          return;
-        }
-
-        toast.info('After signing the transaction in Phantom, return here to complete.');
-        return;
-      } else {
-        toast.error('Phantom Wallet not found');
+      if (!paymentResult.success || !paymentResult.signature) {
+        toast.error(paymentResult.error || 'Payment failed - no signature');
         return;
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Error renewing subscription');
-    }
-  };
 
-  // Очищаем ошибки при загрузке
-  useEffect(() => {
-    if (paymentError) {
-      toast.error(paymentError);
-      clearError();
+      const data = await renewSubscription(paymentResult.signature, solanaPublicKey, loginEmail);
+      toast.success('Subscription successfully renewed!');
+      localStorage.setItem('token', data.token);
+      setUser(data.user);
+      setIsSubscriptionModalOpen(false);
+      router.push('/chat');
+    } else if (typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      // Мобильное устройство
+      localStorage.setItem('phantom_actual_action', 'subscription');
+      localStorage.setItem('phantom_subscription_data', JSON.stringify({ email: loginEmail }));
+
+      if (!publicKey) {
+        localStorage.setItem('phantom_delayed_action', 'subscription');
+        walletModal.setVisible(true);
+        return;
+      }
+
+      const paymentResult = await processPayment();
+
+      if (!paymentResult.success) {
+        toast.error(paymentResult.error || 'Payment failed');
+        return;
+      }
+
+      toast.info('After signing the transaction in Phantom, return here to complete.');
+      return;
+    } else {
+      toast.error('Phantom Wallet not found');
+      return;
     }
-  }, [paymentError, clearError]);
+  } catch (error: any) {
+    toast.error(error.message || 'Error renewing subscription');
+  }
+};
 
   return (
     <>
@@ -311,7 +265,6 @@ export default function RegistrationForm() {
             CryptoChat
           </h1>
           <PhantomWalletConnector />
-          
           {/* Tab Switcher */}
           <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
             <button
