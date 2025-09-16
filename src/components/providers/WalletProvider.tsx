@@ -41,8 +41,7 @@ const endpoint = useMemo(() => {
 
 const mobileWalletAdapter = useMemo(() => {
   return new SolanaMobileWalletAdapter({
-    appIdentity: {
-      name: 'CryptoChat',
+    appIdentity: {name: 'CryptoChat',
       uri: typeof window !== 'undefined' ? window.location.origin : 'https://app.anbanktoken.com',
 
     },
@@ -63,11 +62,11 @@ const mobileWalletAdapter = useMemo(() => {
     [network, mobileWalletAdapter]
   );
 
-  return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
-  );
+return (
+  <ConnectionProvider endpoint={endpoint}>
+    <WalletProvider wallets={wallets} autoConnect={false}>
+      <WalletModalProvider>{children}</WalletModalProvider>
+    </WalletProvider>
+  </ConnectionProvider>
+);
 };
