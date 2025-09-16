@@ -6,18 +6,65 @@ import '../styles/animations.css';
 import '../styles/components.css';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
+
+import React from 'react';
+import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { ConnectionContext, ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { PhantomWalletAdapter, SolflareWalletAdapter, TorusWalletAdapter } from '@solana/wallet-adapter-wallets';
+import {
+  PhantomWalletAdapter,
+  SolflareWalletAdapter,
+  TorusWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { clusterApiUrl } from '@solana/web3.js';
+
+import {
+  SolanaMobileWalletAdapter,
+  createDefaultAddressSelector,
+  AuthorizationResultCache,
+} from '@solana-mobile/wallet-adapter-mobile';
+
+class SimpleAuthorizationResultCache implements AuthorizationResultCache {
+  async get() {
+    return null;
+  }
+  async set() {}
+  async delete() {}
+  async clear() {}
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-const endpoint = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl('mainnet-beta')
-  const wallets = [
-    new PhantomWalletAdapter(),
-    new SolflareWalletAdapter({ network: WalletAdapterNetwork.Mainnet }),
-    new TorusWalletAdapter(),
-  ];
+  const network =
+    process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'https://api.mainnet-beta.solana.com'
+      ? WalletAdapterNetwork.Mainnet
+      : WalletAdapterNetwork.Devnet;
+
+  const endpoint = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
+
+  const mobileWalletAdapter = React.useMemo(() => {
+    return new SolanaMobileWalletAdapter({
+      appIdentity: {
+        name: 'CryptoChat',
+        uri: typeof window !== 'undefined' ? window.location.origin : 'https://yourdomain.com',
+      },
+      authorizationResultCache: new SimpleAuthorizationResultCache(),
+      addressSelector: createDefaultAddressSelector(),
+      chain: network === WalletAdapterNetwork.Mainnet ? 'mainnet-beta' : 'devnet',
+      onWalletNotFound: async () => {
+        alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
+      },
+    });
+  }, [network]);
+
+  const wallets = React.useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter({ network }),
+      new TorusWalletAdapter(),
+      mobileWalletAdapter, // добавлен адаптер для мобильных
+    ],
+    [network, mobileWalletAdapter]
+  );
 
   return (
     <html lang="en">
@@ -40,11 +87,9 @@ const endpoint = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl('mainne
       </head>
       <body>
         <ConnectionProvider endpoint={endpoint}>
-        <WalletProvider wallets={wallets} autoConnect>
-          <WalletModalProvider>
-          {children}
-          </WalletModalProvider>
-        </WalletProvider>
+          <WalletProvider wallets={wallets} autoConnect>
+            <WalletModalProvider>{children}</WalletModalProvider>
+          </WalletProvider>
         </ConnectionProvider>
       </body>
     </html>
