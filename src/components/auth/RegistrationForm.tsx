@@ -65,166 +65,154 @@ export default function RegistrationForm() {
   };
 
 
-  const handleRegisterSubmit = async (data: {
-    nickname: string;
-    email: string;
-    password: string;
-    confirmPassword: string;
-    role: Role;
-    promoCode: string | null;
-  }) => {
-    setRegisterLoading(true);
+ const handleRegisterSubmit = async (data: {
+  nickname: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  role: Role;
+  promoCode: string | null;
+}) => {
+  setRegisterLoading(true);
+
+  if (data.password !== data.confirmPassword) {
+    toast.error('Passwords do not match');
+    setRegisterLoading(false);
+    return;
+  }
+
+  const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
+  if (emailExists) {
+    toast.error('Email is already in use');
+    setRegisterLoading(false);
+    return;
+  }
+  if (nicknameExists) {
+    toast.error('Nickname is already in use');
+    setRegisterLoading(false);
+    return;
+  }
+
+  try {
+    if (data.promoCode) {
+      const result = await registerUser({
+        nickname: data.nickname,
+        email: data.email,
+        password: data.password,
+        role: data.role,
+        promoCode: data.promoCode,
+        solanaPublicKey: null,
+        paymentSignature: null,
+      });
+
+      setRegisterLoading(false);
+
+      if (result.success) {
+        localStorage.setItem('token', result.token || '');
+        setUser(result.user);
+        toast.success('Registration successful!');
+        router.push('/chat');
+      } else {
+        toast.error(result.error || 'Registration failed');
+      }
+
+      return;
+    }
 
 
-    if (data.password !== data.confirmPassword) {
-      toast.error('Passwords do not match');
-      setRegisterLoading(false);
-      return;
-    }
+    // Mobile flow
+    if (isMobile) {
+      localStorage.setItem('phantom_actual_action', 'registration');
+      localStorage.setItem(
+        'phantom_registration_data',
+        JSON.stringify({
+          nickname: data.nickname,
+          email: data.email,
+          password: data.password,
+          role: data.role,
+          promoCode: data.promoCode,
+        }),
+      );
+
+      if (!phantom.publicKey) {
+        localStorage.setItem('phantom_delayed_action', 'registration');
+        walletModal.setVisible(true);
+        setRegisterLoading(false);
+        toast.info('Please connect Phantom and then retry registration');
+        return;
+      } 
+
+      const signature = await phantom.processPayment();
+      if (!signature) {
+        toast.error('Payment failed');
+        setRegisterLoading(false);
+        return;
+      }
+
+      // После успешной оплаты можно продолжить регистрацию автоматически,
+      // либо показать пользователю инструкцию, как продолжить.
+
+      setRegisterLoading(false);
+      toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
+      return;
+    }
 
 
-    const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
-    if (emailExists) {
-      toast.error('Email is already in use');
-      setRegisterLoading(false);
-      return;
-    }
-    if (nicknameExists) {
-      toast.error('Nickname is already in use');
-      setRegisterLoading(false);
-      return;
-    }
+    // Desktop flow
+    if (!phantom.isConnected) {
+      if (!phantom.publicKey) {
+        walletModal.setVisible(true);
+        setRegisterLoading(false);
+        return;
+      }
+      await phantom.connectWallet();
+    }
 
 
-    try {
-      if (data.promoCode) {
-        const result = await registerUser({
-          nickname: data.nickname,
-          email: data.email,
-          password: data.password,
-          role: data.role,
-          promoCode: data.promoCode,
-          solanaPublicKey: null,
-          paymentSignature: null,
-        });
+    const signature = await phantom.processPayment();
+    if (!signature) {
+      toast.error('Payment failed');
+      setRegisterLoading(false);
+      return;
+    }
 
 
-        setRegisterLoading(false);
+    const solanaPublicKey = phantom.publicKey?.toBase58();
+    if (!solanaPublicKey) {
+      toast.error('Failed to get public key');
+      setRegisterLoading(false);
+      return;
+    }
 
 
-        if (result.success) {
-          localStorage.setItem('token', result.token || '');
-          setUser(result.user);
-          toast.success('Registration successful!');
-          router.push('/chat');
-        } else {
-          toast.error(result.error || 'Registration failed');
-        }
+    const result = await registerUser({
+      nickname: data.nickname,
+      email: data.email,
+      password: data.password,
+      role: data.role,
+      solanaPublicKey,
+      paymentSignature: signature,
+      promoCode: null,
+    });
 
 
-        return;
-      }
+    setRegisterLoading(false);
 
 
-      // Mobile flow
-      if (isMobile) {
-        localStorage.setItem('phantom_actual_action', 'registration');
-        localStorage.setItem(
-          'phantom_registration_data',
-          JSON.stringify({
-            nickname: data.nickname,
-            email: data.email,
-            password: data.password,
-            role: data.role,
-            promoCode: data.promoCode,
-          }),
-        );
+    if (result.success) {
+      localStorage.setItem('token', result.token || '');
+      setUser(result.user);
+      toast.success('Registration successful!');
+      router.push('/chat');
+    } else {
+      toast.error(result.error || 'Registration failed');
+    }
+  } catch (error: any) {
+    setRegisterLoading(false);
+    toast.error(error?.message || 'Registration failed');
+  }
+};
 
-
-        if (!phantom.publicKey) {
-          localStorage.setItem('phantom_delayed_action', 'registration');
-          walletModal.setVisible(true);
-          setRegisterLoading(false);
-          toast.info('Please connect Phantom and then retry registration');
-          return;
-        } else {
-          const signature = await phantom.processPayment();
-          if (!signature) {
-            toast.error('Payment failed');
-            setRegisterLoading(false);
-            return;
-          }
-        }
-
-
-        setRegisterLoading(false);
-        toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
-        return;
-      }
-
-
-      // Desktop flow
-      if (!phantom.isConnected) {
-        if (!phantom.publicKey) {
-          walletModal.setVisible(true);
-          setRegisterLoading(false);
-          return;
-        }
-        await phantom.connectWallet();
-      }
-
-
-      const paymentSuccess = await phantom.processPayment();
-      if (!paymentSuccess) {
-        toast.error('Payment failed');
-        setRegisterLoading(false);
-        return;
-      }
-
-
-      const paymentSignature = phantom.paymentStatus.signature;
-      if (!paymentSignature) {
-        toast.error('Payment signature not available');
-        setRegisterLoading(false);
-        return;
-      }
-
-
-      const solanaPublicKey = phantom.publicKey?.toBase58();
-      if (!solanaPublicKey) {
-        toast.error('Failed to get public key');
-        setRegisterLoading(false);
-        return;
-      }
-
-
-      const result = await registerUser({
-        nickname: data.nickname,
-        email: data.email,
-        password: data.password,
-        role: data.role,
-        solanaPublicKey,
-        paymentSignature,
-        promoCode: null,
-      });
-
-
-      setRegisterLoading(false);
-
-
-      if (result.success) {
-        localStorage.setItem('token', result.token || '');
-        setUser(result.user);
-        toast.success('Registration successful!');
-        router.push('/chat');
-      } else {
-        toast.error(result.error || 'Registration failed');
-      }
-    } catch {
-      setRegisterLoading(false);
-      toast.error('Registration failed');
-    }
-  };
 
 
   const handleLoginSubmit = async (email: string, password: string) => {

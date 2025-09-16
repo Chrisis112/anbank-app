@@ -8,9 +8,7 @@ import '../styles/components.css';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 import React from 'react';
-
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { WalletContextProvider } from '@/components/providers/WallletProvider';
+import { WalletContextProvider } from '@/components/providers/WalletProvider';
 
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
