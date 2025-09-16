@@ -28,7 +28,6 @@ export default function RegistrationForm() {
     error: paymentError,
     isConnected,
     publicKey,
-    // убрано: isMobileDevice, clearError
   } = usePhantomPayment();
 
   const walletModal = useWalletModal();
@@ -41,11 +40,93 @@ export default function RegistrationForm() {
   const [loginError, setLoginError] = useState<string | null>(null);
 
   const [loginEmail, setLoginEmail] = useState('');
-
   const [registerLoading, setRegisterLoading] = useState(false);
 
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
+
+  const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  // Механизм отложенного действия для мобильных устройств
+  useEffect(() => {
+    async function completeDelayedAction() {
+      const action = localStorage.getItem('phantom_actual_action');
+      
+      if (action === 'registration') {
+        const savedDataStr = localStorage.getItem('phantom_registration_data');
+        const paymentSignature = localStorage.getItem('phantom_payment_signature');
+        const solanaPublicKey = localStorage.getItem('phantom_public_key');
+        
+        if (savedDataStr && paymentSignature && solanaPublicKey) {
+          setRegisterLoading(true);
+          
+          try {
+            const userData = JSON.parse(savedDataStr);
+            
+            const result = await registerUser({
+              nickname: userData.nickname,
+              email: userData.email,
+              password: userData.password,
+              role: userData.role,
+              solanaPublicKey,
+              paymentSignature,
+              promoCode: userData.promoCode || null,
+            });
+
+            if (result.success) {
+              localStorage.setItem('token', result.token || '');
+              setUser(result.user);
+              toast.success('Registration successful!');
+              
+              // Очистка localStorage
+              localStorage.removeItem('phantom_actual_action');
+              localStorage.removeItem('phantom_registration_data');
+              localStorage.removeItem('phantom_payment_signature');
+              localStorage.removeItem('phantom_public_key');
+              
+              router.push('/chat');
+            } else {
+              toast.error(result.error || 'Registration failed');
+            }
+          } catch (error: any) {
+            toast.error(error.message || 'Registration failed');
+          } finally {
+            setRegisterLoading(false);
+          }
+        }
+      }
+      
+      if (action === 'subscription') {
+        const savedDataStr = localStorage.getItem('phantom_subscription_data');
+        const paymentSignature = localStorage.getItem('phantom_payment_signature');
+        const solanaPublicKey = localStorage.getItem('phantom_public_key');
+        
+        if (savedDataStr && paymentSignature && solanaPublicKey) {
+          try {
+            const subscriptionData = JSON.parse(savedDataStr);
+            
+            const data = await renewSubscription(paymentSignature, solanaPublicKey, subscriptionData.email);
+            toast.success('Subscription successfully renewed!');
+            localStorage.setItem('token', data.token);
+            setUser(data.user);
+            
+            // Очистка localStorage
+            localStorage.removeItem('phantom_actual_action');
+            localStorage.removeItem('phantom_subscription_data');
+            localStorage.removeItem('phantom_payment_signature');
+            localStorage.removeItem('phantom_public_key');
+            
+            setIsSubscriptionModalOpen(false);
+            router.push('/chat');
+          } catch (error: any) {
+            toast.error(error.message || 'Error renewing subscription');
+          }
+        }
+      }
+    }
+
+    completeDelayedAction();
+  }, [router, setUser]);
 
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
@@ -87,6 +168,7 @@ export default function RegistrationForm() {
 
     try {
       if (data.promoCode) {
+        // Регистрация с промокодом без оплаты
         const result = await registerUser({
           nickname: data.nickname,
           email: data.email,
@@ -96,9 +178,9 @@ export default function RegistrationForm() {
           solanaPublicKey: null,
           paymentSignature: null,
         });
-
+        
         setRegisterLoading(false);
-
+        
         if (result.success) {
           localStorage.setItem('token', result.token || '');
           setUser(result.user);
@@ -110,38 +192,61 @@ export default function RegistrationForm() {
         return;
       }
 
-      // Мобильная поддержка убрать, если нет isMobileDevice (альтернативно проверить через userAgent по месту)
-      // Здесь оставляем без мобильной логики
+      // Мобильная логика
+      if (isMobile) {
+        localStorage.setItem('phantom_actual_action', 'registration');
+        localStorage.setItem('phantom_registration_data', JSON.stringify(data));
 
-      if (!isConnected) {
         if (!publicKey) {
+          localStorage.setItem('phantom_delayed_action', 'registration');
           walletModal.setVisible(true);
+          setRegisterLoading(false);
+          toast.info('Please connect Phantom and then retry registration');
+          return;
+        }
+
+        // Сохраняем публичный ключ
+        localStorage.setItem('phantom_public_key', publicKey);
+
+        // Запускаем оплату
+        const paymentResult = await processPayment();
+        
+        if (!paymentResult.success || !paymentResult.signature) {
+          toast.error(paymentResult.error || 'Payment failed');
           setRegisterLoading(false);
           return;
         }
+
+        // Сохраняем подпись платежа для последующего использования
+        localStorage.setItem('phantom_payment_signature', paymentResult.signature);
+
+        setRegisterLoading(false);
+        toast.info('Payment is in progress in the Phantom app. After completion, return here to complete registration.');
+        return;
+      }
+
+      // Десктоп логика
+      if (!isConnected || !publicKey) {
+        walletModal.setVisible(true);
+        setRegisterLoading(false);
+        return;
       }
 
       const paymentResult = await processPayment();
-
+      
       if (!paymentResult.success || !paymentResult.signature) {
         toast.error(paymentResult.error || 'Payment failed');
         setRegisterLoading(false);
         return;
       }
 
-      const solanaPublicKey = publicKey;
-      if (!solanaPublicKey) {
-        toast.error('Failed to get public key');
-        setRegisterLoading(false);
-        return;
-      }
-
+      // Регистрация после успешной оплаты
       const result = await registerUser({
         nickname: data.nickname,
         email: data.email,
         password: data.password,
         role: data.role,
-        solanaPublicKey,
+        solanaPublicKey: publicKey, // publicKey уже строка
         paymentSignature: paymentResult.signature,
         promoCode: null,
       });
@@ -209,12 +314,42 @@ export default function RegistrationForm() {
     setActiveTab('login');
   };
 
-const handleRenewSubscription = async () => {
-  try {
-    if (publicKey) {
-      const solanaPublicKey = publicKey;
+  const handleRenewSubscription = async () => {
+    try {
+      if (isMobile) {
+        // Мобильное устройство
+        localStorage.setItem('phantom_actual_action', 'subscription');
+        localStorage.setItem('phantom_subscription_data', JSON.stringify({ email: loginEmail }));
 
-      // Обрабатываем платеж
+        if (!publicKey) {
+          localStorage.setItem('phantom_delayed_action', 'subscription');
+          walletModal.setVisible(true);
+          return;
+        }
+
+        // Сохраняем публичный ключ
+        localStorage.setItem('phantom_public_key', publicKey);
+
+        const paymentResult = await processPayment();
+
+        if (!paymentResult.success || !paymentResult.signature) {
+          toast.error(paymentResult.error || 'Payment failed');
+          return;
+        }
+
+        // Сохраняем подпись платежа
+        localStorage.setItem('phantom_payment_signature', paymentResult.signature);
+
+        toast.info('After signing the transaction in Phantom, return here to complete.');
+        return;
+      }
+
+      // Десктоп логика
+      if (!publicKey) {
+        walletModal.setVisible(true);
+        return;
+      }
+
       const paymentResult = await processPayment();
 
       if (!paymentResult.success || !paymentResult.signature) {
@@ -222,40 +357,16 @@ const handleRenewSubscription = async () => {
         return;
       }
 
-      const data = await renewSubscription(paymentResult.signature, solanaPublicKey, loginEmail);
+      const data = await renewSubscription(paymentResult.signature, publicKey, loginEmail);
       toast.success('Subscription successfully renewed!');
       localStorage.setItem('token', data.token);
       setUser(data.user);
       setIsSubscriptionModalOpen(false);
       router.push('/chat');
-    } else if (typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
-      // Мобильное устройство
-      localStorage.setItem('phantom_actual_action', 'subscription');
-      localStorage.setItem('phantom_subscription_data', JSON.stringify({ email: loginEmail }));
-
-      if (!publicKey) {
-        localStorage.setItem('phantom_delayed_action', 'subscription');
-        walletModal.setVisible(true);
-        return;
-      }
-
-      const paymentResult = await processPayment();
-
-      if (!paymentResult.success) {
-        toast.error(paymentResult.error || 'Payment failed');
-        return;
-      }
-
-      toast.info('After signing the transaction in Phantom, return here to complete.');
-      return;
-    } else {
-      toast.error('Phantom Wallet not found');
-      return;
+    } catch (error: any) {
+      toast.error(error.message || 'Error renewing subscription');
     }
-  } catch (error: any) {
-    toast.error(error.message || 'Error renewing subscription');
-  }
-};
+  };
 
   return (
     <>
@@ -265,6 +376,7 @@ const handleRenewSubscription = async () => {
             CryptoChat
           </h1>
           <PhantomWalletConnector />
+          
           {/* Tab Switcher */}
           <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
             <button
