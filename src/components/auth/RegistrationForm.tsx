@@ -150,26 +150,27 @@ export default function RegistrationForm() {
         return;
       }
 
-      const result = await registerUser({
-        nickname: data.nickname,
-        email: data.email,
-        password: data.password,
-        role: data.role,
-        solanaPublicKey,
-        paymentSignature: signature,
-        promoCode: null,
-      });
+const authStore = useAuthStore.getState();
 
+const result = await authStore.register(
+  data.nickname,
+  data.email,
+  data.password,
+  data.role,
+  solanaPublicKey,
+  signature,
+  promoCode
+);
       setRegisterLoading(false);
 
-      if (result.success) {
-        localStorage.setItem('token', result.token || '');
-        setUser(result.user);
-        toast.success('Registration successful!');
-        router.push('/chat');
-      } else {
-        toast.error(result.error || 'Registration failed');
-      }
+if (result.success) {
+  localStorage.setItem('token', result.token || '');
+  setUser(result.user ?? null); // если undefined, передаст null
+  toast.success('Registration successful!');
+  router.push('/chat');
+} else {
+  toast.error(result.error || 'Registration failed');
+}
     } catch (error: any) {
       setRegisterLoading(false);
       toast.error(error?.message || 'Registration failed');

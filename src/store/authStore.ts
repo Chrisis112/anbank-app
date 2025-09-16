@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import axios from "axios";
 
-export type UserRole = "newbie" | "advertiser" | "creator"| "admin"
+export type UserRole = "newbie" | "advertiser" | "creator" | "admin";
 
 export type User = {
   id: string;
@@ -10,8 +10,8 @@ export type User = {
   avatar?: string;
   role: UserRole;
   subscriptionExpiresAt?: string;
-  subscribed?: boolean; // для проверки подписки
-  solanaPublicKey?: string; // добавлено для хранения кошелька пользователя
+  subscribed?: boolean;
+  solanaPublicKey?: string;
 };
 
 export interface LoginResponse {
@@ -33,7 +33,6 @@ type AuthStore = {
   token: string | null;
   isLoading: boolean;
 
-  // Actions
   login: (email: string, password: string) => Promise<LoginResponse>;
   register: (
     nickname: string,
@@ -77,7 +76,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       };
     } catch (err: any) {
       set({ isLoading: false });
-
       return {
         success: false,
         error: err.response?.data?.message || "Login failed",
@@ -98,7 +96,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const { data } = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
-        { nickname, email, password, role, solanaPublicKey, paymentSignature, promoCode }
+        {
+          nickname,
+          email,
+          password,
+          role,
+          solanaPublicKey,
+          paymentSignature,
+          promoCode,
+        }
       );
 
       if (data.token) {
@@ -115,7 +121,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       };
     } catch (err: any) {
       set({ isLoading: false });
-
       return {
         success: false,
         error: err.response?.data?.message || "Registration failed",
@@ -145,5 +150,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   setLanguage(lang) {
+    // Реализуйте, если нужно
   },
 }));
