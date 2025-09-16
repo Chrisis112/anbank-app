@@ -57,6 +57,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
+      mobileWalletAdapter,
     ],
     [network, mobileWalletAdapter]
   );
