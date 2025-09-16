@@ -32,7 +32,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   const isMainnet = rpcUrl.includes('mainnet') || rpcUrl.includes('solana-mainnet');
 
   // Замена endpoint на ваш прокси сервер для обхода CORS
-  const endpoint = 'https://api.anbanktoken.com/api/rpc-proxy';
+  const endpoint = 'https://api.anbanktoken.com/rpc-proxy';
 
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({
