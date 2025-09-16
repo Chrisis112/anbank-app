@@ -9,29 +9,48 @@ export default function PhantomWalletConnector() {
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
+const phantomDeepLink = 'https://phantom.app/ul/v1/connect';
 
-  const handleConnectWallet = useCallback(async () => {
-    if (connected) {
-      toast.info('Phantom Wallet уже подключен');
-      return;
-    }
+ const handleConnectWallet = useCallback(async () => {
+  if (connected) {
+    toast.info('Phantom Wallet уже подключен');
+    return;
+  }
 
-    if (!wallet) {
-      walletModal.setVisible(true);
-      return;
-    }
+  const isMobile = typeof navigator !== 'undefined' &&
+    /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
-    setIsConnecting(true);
-    try {
-      await connect();
-      toast.success('Phantom Wallet успешно подключен!');
-    } catch (error) {
-      console.error('Ошибка подключения к Phantom:', error);
-      toast.error('Не удалось подключить Phantom Wallet');
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [connect, connected, wallet, walletModal]);
+  if (isMobile) {
+    // Попробуем открыть Phantom через deeplink
+    window.location.href = 'https://phantom.app/ul/v1/connect';
+
+    // Можно показать уведомление или подсказку
+    toast.info('Откройте Phantom для подключения кошелька');
+    return;
+  }
+
+  if (!wallet) {
+    walletModal.setVisible(true);
+    return;
+  }
+
+  setIsConnecting(true);
+  try {
+    await connect();
+    toast.success('Phantom Wallet успешно подключен!');
+  } catch (error) {
+    console.error('Ошибка подключения к Phantom:', error);
+    toast.error('Не удалось подключить Phantom Wallet');
+  } finally {
+    setIsConnecting(false);
+  }
+}, [connect, connected, wallet, walletModal]);
+
+
+useEffect(() => {
+  const walletAny = wallet as any;
+  console.log('Active wallet:', walletAny?.name);
+}, [wallet]);
 
   const handleDisconnectWallet = useCallback(async () => {
     try {
