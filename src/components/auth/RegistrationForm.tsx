@@ -105,13 +105,12 @@ export default function RegistrationForm() {
       // Подключение и оплата для мобильных устройств
 if (isMobile) {
   if (!connected) {
-    try {
-      await connect();
-    } catch {
-      toast.error('Please connect your Phantom wallet to proceed.');
-      setRegisterLoading(false);
-      return;
-    }
+    const returnUrl = encodeURIComponent(window.location.href);
+    const phantomDeepLink = `https://phantom.app/ul/v1/connect?app_url=${returnUrl}`;
+    window.location.href = phantomDeepLink;
+    toast.info('Пожалуйста, откройте Phantom для подключения кошелька');
+    setRegisterLoading(false);
+    return;
   }
 
   const signature = await phantom.processPayment();
