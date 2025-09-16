@@ -1,329 +1,306 @@
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Connection } from '@solana/web3.js';
+// hooks/usePhantomPayment.ts
 import { useState, useCallback, useEffect } from 'react';
-import bs58 from 'bs58';
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, VersionedTransaction, TransactionMessage } from '@solana/web3.js';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 
-// Environment variables
 const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
 const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.36');
 
-interface PaymentStatus {
+interface PaymentResult {
   signature: string | null;
-  confirmed: boolean;
-  error: string | null;
+  success: boolean;
+  error?: string;
+  txHash?: string;
 }
 
-interface PaymentHookReturn {
-  wallet: any;
-  isConnected: boolean;
-  isConnecting: boolean;
-  publicKey: PublicKey | null;
-
-  isProcessingPayment: boolean;
-  paymentStatus: PaymentStatus;
-
-  connectWallet: () => Promise<boolean>;
-  disconnectWallet: () => Promise<void>;
-  processPayment: (customAmount?: number) => Promise<string | null>;
-  resetPaymentStatus: () => void;
-
-  getBalance: () => Promise<number | null>;
-  isPhantomInstalled: boolean;
+interface PaymentOptions {
+  skipPreflight?: boolean;
+  commitment?: 'processed' | 'confirmed' | 'finalized';
+  maxRetries?: number;
 }
 
-function openPhantomDeepLink({
-    transaction,
-    session,
-    dappEncryptionPublicKey,
-    nonce,
-    redirectLink,
-    sharedSecret,
-}: {
-    transaction: Transaction;         // <-- Вот здесь строго типизируешь!
-    session: string;
-    dappEncryptionPublicKey: string;
-    nonce: string;
-    redirectLink: string;
-    sharedSecret: string;
-}) {
-  // 1. Сериализуем транзакцию
-  const serializedTx = transaction.serialize({ requireAllSignatures: false });
-  const payload = {
-    session,
-    transaction: bs58.encode(serializedTx)
-  };
-
-  // 2. Шифруем payload
-  // Для демонстрации оставим простую сериализацию, production — обязательно шифрование!
-  // const [nonceValue, encryptedPayload] = encryptPayload(payload, sharedSecret);
-  const encryptedPayload = bs58.encode(Buffer.from(JSON.stringify(payload)));
-  const nonceValue = bs58.encode(Buffer.from(nonce));
-
-  // 3. Собираем deeplink
-  const params = new URLSearchParams({
-    dapp_encryption_public_key: dappEncryptionPublicKey, // Для демо: bs58.encode(dappPublicKey)
-    nonce: nonceValue,
-    redirect_link: redirectLink,
-    payload: encryptedPayload,
-  });
-
-  const deeplink = `https://phantom.app/ul/v1/signTransaction?${params.toString()}`;
-  window.open(deeplink, "_blank");
-}
-
-
-// Direct payment method bypassing wallet adapter, used only on some mobile cases
-async function processPaymentDirectly(
-  transaction: Transaction,
-  connection: Connection,
-  publicKey: PublicKey
-): Promise<string> {
-  //@ts-ignore
-  const provider = (window as any).solana;
-  if (!provider?.isPhantom) throw new Error('Phantom wallet not available');
-
-  if (!provider.isConnected) {
-    await provider.connect();
-  }
-
-  // Set recent blockhash and fee payer before signing
-  const latestBlockhash = await connection.getLatestBlockhash();
-  transaction.recentBlockhash = latestBlockhash.blockhash;
-  transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
-  transaction.feePayer = publicKey;
-
-  const signedTx = await provider.signTransaction(transaction);
-  const serializedTx = signedTx.serialize();
-
-  const signature = await connection.sendRawTransaction(serializedTx);
-
-  await connection.confirmTransaction(
-    {
-      signature,
-      blockhash: latestBlockhash.blockhash,
-      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-    },
-    'confirmed'
-  );
-
-  return signature;
-}
-
-// Main hook
-export const usePhantomPayment = (): PaymentHookReturn => {
+export const usePhantomPayment = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  
+  const { 
+    publicKey, 
+    sendTransaction, 
+    connected, 
+    signTransaction, 
+    wallet,
+    connecting,
+    disconnecting 
+  } = useWallet();
   const { connection } = useConnection();
-  const { wallet, publicKey, connected, connecting, connect, disconnect, sendTransaction } = useWallet();
 
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({
-    signature: null,
-    confirmed: false,
-    error: null,
-  });
-  const [isPhantomInstalled, setIsPhantomInstalled] = useState(false);
-
+  // Определяем тип устройства
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const isDesktopPhantom = !!(window as any).solana?.isPhantom;
-      const isMobilePhantom = !!(window as any).phantom?.solana;
-      setIsPhantomInstalled(isDesktopPhantom || isMobilePhantom);
-    }
-    if (wallet) setIsPhantomInstalled(true);
-  }, [wallet]);
+    const checkMobileDevice = () => {
+      const userAgent = typeof window !== 'undefined' ? navigator.userAgent : '';
+      const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+      setIsMobileDevice(mobileRegex.test(userAgent));
+    };
 
-  const connectWallet = useCallback(async (): Promise<boolean> => {
-    if (!wallet) {
-      setPaymentStatus((prev) => ({
-        ...prev,
-        error: 'No wallet selected, please choose a wallet first.',
-      }));
-      return false;
-    }
-    try {
-      await connect();
-      return true;
-    } catch (error) {
-      console.error('Failed to connect wallet:', error);
-      setPaymentStatus((prev) => ({
-        ...prev,
-        error: 'Failed to connect wallet. Please try again.',
-      }));
-      return false;
-    }
-  }, [connect, wallet]);
+    checkMobileDevice();
+  }, []);
 
-  const disconnectWallet = useCallback(async (): Promise<void> => {
-    try {
-      await disconnect();
-      resetPaymentStatus();
-    } catch (error) {
-      console.error('Failed to disconnect wallet:', error);
-    }
-  }, [disconnect]);
-
-  const getBalance = useCallback(async (): Promise<number | null> => {
-    if (!publicKey || !connection) return null;
-    try {
-      const balance = await connection.getBalance(publicKey);
-      return balance / LAMPORTS_PER_SOL;
-    } catch (error) {
-      console.error('Failed to get balance:', error);
-      return null;
-    }
-  }, [publicKey, connection]);
-const processPayment = useCallback(async (customAmount?: number): Promise<string | null> => {
-  if (!connected || !publicKey || !sendTransaction) {
-    setPaymentStatus({
-      signature: null,
-      confirmed: false,
-      error: 'Wallet not connected',
+  // Создание оптимизированной транзакции для мобильных устройств
+  const createOptimizedTransaction = useCallback(async (
+    fromPubkey: PublicKey,
+    toPubkey: PublicKey,
+    amount: number,
+    connection: Connection
+  ): Promise<Transaction | VersionedTransaction> => {
+    
+    // Получаем актуальный blockhash с максимальной совместимостью
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash({
+      commitment: 'confirmed'
     });
-    return null;
-  }
 
-  if (!RECEIVER_WALLET) {
-    setPaymentStatus({
-      signature: null,
-      confirmed: false,
-      error: 'Receiver wallet not configured',
-    });
-    return null;
-  }
+    if (isMobileDevice) {
+      // Для мобильных используем VersionedTransaction (более совместим с MWA)
+      const instructions = [
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports: Math.floor(amount * LAMPORTS_PER_SOL),
+        })
+      ];
 
-  setIsProcessingPayment(true);
-  setPaymentStatus({
-    signature: null,
-    confirmed: false,
-    error: null,
-  });
+      const messageV0 = new TransactionMessage({
+        payerKey: fromPubkey,
+        recentBlockhash: blockhash,
+        instructions,
+      }).compileToV0Message();
 
-  try {
-    const amount = customAmount || SOL_AMOUNT;
-    if (amount <= 0) throw new Error('Invalid payment amount');
-
-    const lamports = amount * LAMPORTS_PER_SOL;
-    const balance = await getBalance();
-    if (balance !== null && balance < amount + 0.001) throw new Error('Insufficient balance');
-
-    const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
-
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: publicKey,
-        toPubkey: receiverPublicKey,
-        lamports: Math.floor(lamports),
-      }),
-    );
-
-    const latestBlockhash = await connection.getLatestBlockhash();
-    transaction.recentBlockhash = latestBlockhash.blockhash;
-    transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
-    transaction.feePayer = publicKey;
-
-    console.log('User publicKey:', publicKey?.toBase58());
-    console.log('Transaction feePayer:', transaction.feePayer?.toBase58());
-
-    const isMobile =
-      typeof window !== 'undefined' &&
-      /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-
-    let signature: string | null = null;
-
-    if (isMobile && wallet && 'signTransaction' in wallet) {
-      console.log('Using mobile wallet flow with Phantom deeplink');
-
-      // Здесь нужно определить эти переменные согласно твоей реализации подключения deep link handshake:
-      const phantomSession = 'demo-session-id'; // временно для теста, подставь реальное значение
-      const dappEncryptionPublicKey = 'demo-dapp-public-key'; // base58 public key dapp, получить при connect
-      const nonce = Date.now().toString(); // например, текущее время
-      const redirectLink = window.location.origin + '/phantom-callback'; // страница для возврата после подписи
-      const sharedSecret = 'demo-shared-secret'; // получить при handshake, нужен для шифрования!
-
-      openPhantomDeepLink({
-        transaction,
-        session: phantomSession,
-        dappEncryptionPublicKey,
-        nonce,
-        redirectLink,
-        sharedSecret,
-      });
-
-      setPaymentStatus({
-        signature: null,
-        confirmed: false,
-        error: 'Ожидается подпись через Phantom App. После подписи перейдите обратно.',
-      });
-
-      // Ожидаем, что после возврата на redirectLink будет обработка подписанной транзакции — здесь просто возвращаем null
-      return null;
+      return new VersionedTransaction(messageV0);
     } else {
-      console.log('Using desktop wallet flow with sendTransaction');
-      signature = await sendTransaction(transaction, connection);
-
-      setPaymentStatus({
-        signature,
-        confirmed: false,
-        error: null,
+      // Для браузера используем обычную Transaction
+      const transaction = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: fromPubkey,
       });
 
-      await connection.confirmTransaction(
+      const transferInstruction = SystemProgram.transfer({
+        fromPubkey,
+        toPubkey,
+        lamports: Math.floor(amount * LAMPORTS_PER_SOL),
+      });
+
+      transaction.add(transferInstruction);
+      return transaction;
+    }
+  }, [isMobileDevice]);
+
+  // Отправка транзакции с учетом типа устройства
+  const sendOptimizedTransaction = useCallback(async (
+    transaction: Transaction | VersionedTransaction,
+    connection: Connection,
+    options: PaymentOptions = {}
+  ): Promise<string> => {
+    const {
+      skipPreflight = false,
+      commitment = 'confirmed',
+      maxRetries = 3
+    } = options;
+
+    try {
+      if (isMobileDevice) {
+        // Мобильная стратегия: используем sendTransaction с дополнительными опциями
+        return await sendTransaction(transaction as any, connection, {
+          skipPreflight,
+          preflightCommitment: commitment,
+          maxRetries,
+          // Дополнительные опции для мобильных устройств
+          minContextSlot: undefined,
+        });
+      } else {
+        // Браузерная стратегия
+        if (transaction instanceof VersionedTransaction) {
+          return await sendTransaction(transaction as any, connection, {
+            skipPreflight,
+            preflightCommitment: commitment,
+          });
+        } else {
+          return await sendTransaction(transaction, connection, {
+            skipPreflight,
+            preflightCommitment: commitment,
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error('Ошибка отправки транзакции:', error);
+      
+      // Попытка альтернативного метода для мобильных устройств
+      if (isMobileDevice && signTransaction) {
+        console.log('Пробуем альтернативный метод подписания для мобильного...');
+        
+        try {
+          const signedTransaction = await signTransaction(transaction as Transaction);
+          return await connection.sendRawTransaction(
+            signedTransaction.serialize(),
+            {
+              skipPreflight,
+              preflightCommitment: commitment,
+              maxRetries,
+            }
+          );
+        } catch (altError: any) {
+          console.error('Альтернативный метод также не сработал:', altError);
+          throw new Error(`Не удалось отправить транзакцию: ${altError.message}`);
+        }
+      }
+      
+      throw error;
+    }
+  }, [isMobileDevice, sendTransaction, signTransaction]);
+
+  const processPayment = useCallback(async (
+    customOptions: PaymentOptions = {}
+  ): Promise<PaymentResult> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Проверки
+      if (connecting || disconnecting) {
+        throw new Error('Кошелек в процессе подключения/отключения. Попробуйте позже.');
+      }
+
+      if (!connected || !publicKey) {
+        throw new Error('Кошелек не подключен. Пожалуйста, подключите кошелек.');
+      }
+
+      if (!RECEIVER_WALLET) {
+        throw new Error('Адрес получателя не настроен в переменных окружения.');
+      }
+
+      if (!wallet) {
+        throw new Error('Кошелек не инициализирован.');
+      }
+
+      // Проверяем баланс
+      const balance = await connection.getBalance(publicKey);
+      const requiredAmount = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+      const estimatedFee = 5000; // примерная комиссия в lamports
+
+      if (balance < requiredAmount + estimatedFee) {
+        throw new Error(
+          `Недостаточно средств. Требуется: ${(requiredAmount + estimatedFee) / LAMPORTS_PER_SOL} SOL, доступно: ${balance / LAMPORTS_PER_SOL} SOL`
+        );
+      }
+
+      console.log(`Обработка платежа на ${isMobileDevice ? 'мобильном' : 'десктоп'} устройстве...`);
+
+      // Создаем получателя
+      const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
+
+      // Создаем оптимизированную транзакцию
+      const transaction = await createOptimizedTransaction(
+        publicKey,
+        receiverPublicKey,
+        SOL_AMOUNT,
+        connection
+      );
+
+      console.log('Транзакция создана, отправляем...');
+
+      // Отправляем транзакцию
+      const signature = await sendOptimizedTransaction(transaction, connection, {
+        skipPreflight: false,
+        commitment: 'confirmed',
+        maxRetries: 5,
+        ...customOptions,
+      });
+
+      console.log('Транзакция отправлена, подпись:', signature);
+
+      // Получаем blockhash для подтверждения
+      const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+
+      // Подтверждаем транзакцию
+      const confirmation = await connection.confirmTransaction(
         {
           signature,
           blockhash: latestBlockhash.blockhash,
           lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
         },
-        'confirmed',
+        'confirmed'
       );
 
-      setPaymentStatus({
+      if (confirmation.value.err) {
+        throw new Error(`Транзакция отклонена сетью: ${JSON.stringify(confirmation.value.err)}`);
+      }
+
+      console.log('Транзакция подтверждена успешно!');
+
+      return {
         signature,
-        confirmed: true,
-        error: null,
+        success: true,
+        txHash: signature,
+      };
+
+    } catch (err: any) {
+      let errorMessage = 'Неизвестная ошибка при обработке платежа';
+      
+      // Обработка специфических ошибок
+      if (err.message) {
+        if (err.message.includes('User rejected')) {
+          errorMessage = 'Пользователь отклонил транзакцию';
+        } else if (err.message.includes('Signature verification failed')) {
+          errorMessage = 'Ошибка подписи транзакции. Попробуйте переподключить кошелек.';
+        } else if (err.message.includes('insufficient funds')) {
+          errorMessage = 'Недостаточно средств для совершения транзакции';
+        } else if (err.message.includes('Missing signature')) {
+          errorMessage = 'Ошибка подписания транзакции. Убедитесь, что кошелек разблокирован.';
+        } else if (err.message.includes('Network request failed') || err.message.includes('timeout')) {
+          errorMessage = 'Проблема с сетевым соединением. Попробуйте еще раз.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
+      setError(errorMessage);
+      console.error('Детали ошибки платежа:', {
+        error: err,
+        message: err.message,
+        stack: err.stack,
+        isMobile: isMobileDevice,
+        wallet: wallet?.adapter?.name,
       });
 
-      console.log(`Payment successful! Signature: ${signature}`);
-      return signature;
+      return {
+        signature: null,
+        success: false,
+        error: errorMessage,
+      };
+    } finally {
+      setIsLoading(false);
     }
-  } catch (error: any) {
-    console.error('Payment failed:', error);
-    setPaymentStatus({
-      signature: null,
-      confirmed: false,
-      error: error?.message || 'Payment failed',
-    });
-    return null;
-  } finally {
-    setIsProcessingPayment(false);
-  }
-}, [connected, publicKey, sendTransaction, connection, wallet, getBalance]);
-
-
-  const resetPaymentStatus = useCallback(() => {
-    setPaymentStatus({
-      signature: null,
-      confirmed: false,
-      error: null,
-    });
-  }, []);
+  }, [
+    publicKey,
+    connected,
+    connecting,
+    disconnecting,
+    wallet,
+    connection,
+    createOptimizedTransaction,
+    sendOptimizedTransaction,
+    isMobileDevice
+  ]);
 
   return {
-    wallet,
-    isConnected: connected,
-    isConnecting: connecting,
-    publicKey,
-
-    isProcessingPayment,
-    paymentStatus,
-
-    connectWallet,
-    disconnectWallet,
     processPayment,
-    resetPaymentStatus,
-
-    getBalance,
-    isPhantomInstalled,
+    isLoading,
+    error,
+    isConnected: connected,
+    publicKey: publicKey?.toString() || null,
+    walletName: wallet?.adapter?.name || null,
+    isMobileDevice,
+    clearError: () => setError(null),
+    retryPayment: () => processPayment(),
   };
 };
-
-export default usePhantomPayment;
