@@ -1,12 +1,8 @@
 import React, { FC, ReactNode, useMemo } from 'react';
 import {
-  clusterApiUrl,
-} from '@solana/web3.js';
-import {
   ConnectionProvider,
   WalletProvider,
 } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import {
   PhantomWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
@@ -36,7 +32,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   const isMainnet = rpcUrl.includes('mainnet') || rpcUrl.includes('solana-mainnet');
 
   // Замена endpoint на ваш прокси сервер для обхода CORS
-  const endpoint = 'https://app.anbanktoken.com/rpc-proxy';
+  const endpoint = 'https://api.anbanktoken.com/api/rpc-proxy';
 
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({
