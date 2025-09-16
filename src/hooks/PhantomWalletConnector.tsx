@@ -1,7 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'react-toastify';
+import {
+  SolanaMobileWalletAdapter,
+  createDefaultAddressSelector,
+  AuthorizationResultCache,
+  LocalSolanaMobileWalletAdapter,
+} from '@solana-mobile/wallet-adapter-mobile';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+
+
+class SimpleAuthorizationResultCache implements AuthorizationResultCache {
+  async get() { return null; }
+  async set() {}
+  async delete() {}
+  async clear() {}
+}
 
 export default function PhantomWalletConnector() {
   const { wallet, connected, publicKey, connect, disconnect } = useWallet();
@@ -10,53 +25,64 @@ export default function PhantomWalletConnector() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
 
- const handleConnectWallet = useCallback(async () => {
-  if (connected) {
-    toast.info('Phantom Wallet уже подключен');
-    return;
-  }
+  const mobileWalletAdapter = useMemo(() => new SolanaMobileWalletAdapter({
+    appIdentity: { 
+      name: 'CryptoChat',
+      uri: typeof window !== 'undefined' ? window.location.origin : undefined
+    },
+    authorizationResultCache: new SimpleAuthorizationResultCache(),
+    addressSelector: createDefaultAddressSelector(),
+    cluster: 'mainnet-beta', // или 'devnet' в зависимости от сети
+    onWalletNotFound: async (_adapter: LocalSolanaMobileWalletAdapter) => {
+      alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
+    }
+  }), []);
 
-  const isMobile = typeof navigator !== 'undefined' &&
-    /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  const wallets = useMemo(() => [
+    new PhantomWalletAdapter(),
+    mobileWalletAdapter,
+  ], [mobileWalletAdapter]);
 
-  if (isMobile) {
-    const returnUrl = encodeURIComponent(window.location.href);
-    const phantomDeepLink = `https://phantom.app/ul/v1/connect?app_url=${returnUrl}`;
+  const handleConnectWallet = useCallback(async () => {
+    if (connected) {
+      toast.info('Phantom Wallet уже подключен');
+      return;
+    }
 
-    window.location.href = phantomDeepLink;
+    const isMobile = typeof navigator !== 'undefined' &&
+      /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
-    toast.info('Пожалуйста, откройте Phantom для подключения кошелька');
-    return;
-  }
+    if (isMobile) {
+      const returnUrl = encodeURIComponent(window.location.href);
+      const phantomDeepLink = `https://phantom.app/ul/v1/connect?app_url=${returnUrl}`;
 
-if (!wallet) {
-  if (typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
-    const returnUrl = encodeURIComponent(window.location.href);
-    window.location.href = `https://phantom.app/ul/v1/connect?app_url=${returnUrl}`;
-    return;
-  }
-  walletModal.setVisible(true);
-  return;
-}
+      window.location.href = phantomDeepLink;
 
+      toast.info('Пожалуйста, откройте Phantom для подключения кошелька');
+      return;
+    }
 
-  setIsConnecting(true);
-  try {
-    await connect();
-    toast.success('Phantom Wallet успешно подключен!');
-  } catch (error) {
-    console.error('Ошибка подключения к Phantom:', error);
-    toast.error('Не удалось подключить Phantom Wallet');
-  } finally {
-    setIsConnecting(false);
-  }
-}, [connected, wallet, walletModal, connect]);
+    if (!wallet) {
+      walletModal.setVisible(true);
+      return;
+    }
 
+    setIsConnecting(true);
+    try {
+      await connect();
+      toast.success('Phantom Wallet успешно подключен!');
+    } catch (error) {
+      console.error('Ошибка подключения к Phantom:', error);
+      toast.error('Не удалось подключить Phantom Wallet');
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [connected, wallet, walletModal, connect]);
 
-useEffect(() => {
-  const walletAny = wallet as any;
-  console.log('Active wallet:', walletAny?.name);
-}, [wallet]);
+  useEffect(() => {
+    const walletAny = wallet as any;
+    console.log('Active wallet:', walletAny?.name);
+  }, [wallet]);
 
   const handleDisconnectWallet = useCallback(async () => {
     try {
@@ -78,34 +104,31 @@ useEffect(() => {
     }
   }, [connected, publicKey]);
 
-useEffect(() => {
-  if (!wallet) return;
+  useEffect(() => {
+    if (!wallet) return;
 
-  // Приводим к any для обхода ошибки TS
-  const walletAny = wallet as any;
+    const walletAny = wallet as any;
 
-  if (typeof walletAny.on === 'function' && typeof walletAny.off === 'function') {
-    const onConnect = () => {
-      if (walletAny.publicKey) setPhantomPublicKey(walletAny.publicKey.toBase58());
-      console.log('Wallet connect event');
-    };
+    if (typeof walletAny.on === 'function' && typeof walletAny.off === 'function') {
+      const onConnect = () => {
+        if (walletAny.publicKey) setPhantomPublicKey(walletAny.publicKey.toBase58());
+        console.log('Wallet connect event');
+      };
 
-    const onDisconnect = () => {
-      setPhantomPublicKey(null);
-      console.log('Wallet disconnect event');
-    };
+      const onDisconnect = () => {
+        setPhantomPublicKey(null);
+        console.log('Wallet disconnect event');
+      };
 
-    walletAny.on('connect', onConnect);
-    walletAny.on('disconnect', onDisconnect);
+      walletAny.on('connect', onConnect);
+      walletAny.on('disconnect', onDisconnect);
 
-    return () => {
-      walletAny.off('connect', onConnect);
-      walletAny.off('disconnect', onDisconnect);
-    };
-  }
-
-}, [wallet]);
-
+      return () => {
+        walletAny.off('connect', onConnect);
+        walletAny.off('disconnect', onDisconnect);
+      };
+    }
+  }, [wallet]);
 
   return (
     <div style={{ maxWidth: 400, margin: 'auto', padding: 20 }}>
