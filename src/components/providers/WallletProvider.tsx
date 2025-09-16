@@ -18,15 +18,13 @@ import {
   AuthorizationResultCache,
 } from '@solana-mobile/wallet-adapter-mobile';
 
-require('@solana/wallet-adapter-react-ui/styles.css');
-
 class SimpleAuthorizationResultCache implements AuthorizationResultCache {
   async get() {
     return null;
   }
   async set() {}
   async delete() {}
-  async clear() {} 
+  async clear() {}
 }
 
 interface Props {
@@ -43,17 +41,15 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
     return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
   }, [network]);
 
-  
-
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({
       appIdentity: {
         name: 'CryptoChat',
-        uri: typeof window !== 'undefined' ? window.location.origin : 'https://yourappdomain.com',
+        uri: typeof window !== 'undefined' ? window.location.origin : 'https://app.anbanktoken.com',
       },
       authorizationResultCache: new SimpleAuthorizationResultCache(),
       addressSelector: createDefaultAddressSelector(),
-      cluster: network === WalletAdapterNetwork.Mainnet ? 'mainnet-beta' : 'devnet',
+      chain: network === WalletAdapterNetwork.Mainnet ? 'mainnet-beta' : 'devnet', // используем chain вместо cluster
       onWalletNotFound: async () => {
         alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
       },
