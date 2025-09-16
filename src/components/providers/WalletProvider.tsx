@@ -22,12 +22,9 @@ class SimpleAuthorizationResultCache implements AuthorizationResultCache {
 interface Props {
   children: ReactNode;
 }
-
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase() || '';
-  const isMainnet = rpcUrl.includes('mainnet') || rpcUrl.includes('solana-mainnet');
-const endpoint = 'https://api.anbanktoken.com/rpc-proxy';
-
+  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || '';
+  const isMainnet = rpcUrl.toLowerCase().includes('mainnet') || rpcUrl.toLowerCase().includes('solana-mainnet');
 
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({
@@ -49,13 +46,16 @@ const endpoint = 'https://api.anbanktoken.com/rpc-proxy';
     mobileWalletAdapter,
   ], [mobileWalletAdapter]);
 
+  // Формируем wsEndpoint из rpcUrl, если возможно
+  const wsEndpoint = rpcUrl.startsWith('https://')
+    ? rpcUrl.replace(/^https:\/\//, 'wss://')
+    : undefined;
+
   return (
-    <ConnectionProvider
-  endpoint={endpoint}
-  config={{
-    wsEndpoint: 'wss://api.anbanktoken.com/rpc-ws', // если поддерживается
-  }}
->
+    <ConnectionProvider 
+      endpoint={rpcUrl}
+      config={wsEndpoint ? { wsEndpoint } : {}}
+    >
       <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>
           {children}
