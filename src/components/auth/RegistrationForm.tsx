@@ -122,51 +122,29 @@ export default function RegistrationForm() {
 
 
     // Mobile flow
-    if (isMobile) {
-      localStorage.setItem('phantom_actual_action', 'registration');
-      localStorage.setItem(
-        'phantom_registration_data',
-        JSON.stringify({
-          nickname: data.nickname,
-          email: data.email,
-          password: data.password,
-          role: data.role,
-          promoCode: data.promoCode,
-        }),
-      );
-
-      if (!phantom.publicKey) {
-        localStorage.setItem('phantom_delayed_action', 'registration');
-        walletModal.setVisible(true);
-        setRegisterLoading(false);
-        toast.info('Please connect Phantom and then retry registration');
-        return;
-      } 
-          if (!connected) {
-      // Если кошелек не подключен, принудительно попытайтесь подключиться
-      try {
-        await connect();
-      } catch {
-        alert('Please connect your Phantom wallet to proceed');
-        return;
-      }
-    }
-
-      const signature = await phantom.processPayment();
-      if (!signature) {
-        toast.error('Payment failed');
-        setRegisterLoading(false);
-        return;
-      }
-
-      // После успешной оплаты можно продолжить регистрацию автоматически,
-      // либо показать пользователю инструкцию, как продолжить.
-
+if (isMobile) {
+  if (!connected) {
+    try {
+      await connect();
+    } catch {
+      toast.error('Please connect your Phantom wallet to proceed.');
       setRegisterLoading(false);
-      toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
       return;
     }
+  }
 
+  // Теперь кошелек подключен, вызываем оплату
+  const signature = await phantom.processPayment();
+  if (!signature) {
+    toast.error('Payment failed');
+    setRegisterLoading(false);
+    return;
+  }
+
+  setRegisterLoading(false);
+  toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
+  return;
+}
 
     // Desktop flow
     if (!phantom.isConnected) {
