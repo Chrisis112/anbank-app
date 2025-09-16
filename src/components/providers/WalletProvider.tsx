@@ -30,13 +30,13 @@ class SimpleAuthorizationResultCache implements AuthorizationResultCache {
 interface Props {
   children: ReactNode;
 }
-
 export const WalletContextProvider: FC<Props> = ({ children }) => {
+  // Логика isMainnet понадобится для настройки chain, оставьте
   const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase() || '';
   const isMainnet = rpcUrl.includes('mainnet') || rpcUrl.includes('solana-mainnet');
 
-  // Используем кастомный RPC или дефолтный для mainnet/devnet
-  const endpoint = rpcUrl || (isMainnet ? 'https://api.mainnet-beta.solana.com' : clusterApiUrl(WalletAdapterNetwork.Devnet));
+  // Замена endpoint на ваш прокси сервер для обхода CORS
+  const endpoint = 'https://app.anbanktoken.com/rpc-proxy';
 
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({
@@ -62,10 +62,10 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
   );
 
   return (
-<ConnectionProvider endpoint={endpoint}>
-  <WalletProvider wallets={wallets} autoConnect={false}>
-    <WalletModalProvider>{children}</WalletModalProvider>
-  </WalletProvider>
-</ConnectionProvider>
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect={false}>
+        <WalletModalProvider>{children}</WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
   );
 };
