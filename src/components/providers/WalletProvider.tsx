@@ -26,7 +26,7 @@ interface Props {
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase() || '';
   const isMainnet = rpcUrl.includes('mainnet') || rpcUrl.includes('solana-mainnet');
-  const endpoint = 'https://api.anbanktoken.com/rpc-proxy';
+  const endpoint = 'https://solana-mainnet.api.syndica.io/api-key/3pfZ59roe79KJVrUGQS2umc9AQkxbPhPwziRo5GBdofqyGF6NKjzk2quzFzNZj21o24ioLoauszYGedJfy3za7uouytyXHvKoNv';
 
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({

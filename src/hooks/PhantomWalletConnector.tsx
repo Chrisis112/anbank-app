@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { WalletAdapter } from '@solana/wallet-adapter-base';
 import { toast } from 'react-toastify';
 
 export default function PhantomWalletConnector() {
@@ -17,7 +18,7 @@ export default function PhantomWalletConnector() {
     }
 
     if (!wallet) {
-      walletModal.setVisible(true); // Показываем модальное окно выбора кошелька
+      walletModal.setVisible(true);
       return;
     }
 
@@ -45,14 +46,38 @@ export default function PhantomWalletConnector() {
 
   useEffect(() => {
     if (connected && publicKey) {
-      const pkStr = publicKey.toBase58();
-      setPhantomPublicKey(pkStr);
-      console.log('Wallet connected:', pkStr);
+      setPhantomPublicKey(publicKey.toBase58());
+      console.log('Wallet connected:', publicKey.toBase58());
     } else {
       setPhantomPublicKey(null);
       console.log('Wallet disconnected or not connected');
     }
   }, [connected, publicKey]);
+
+  useEffect(() => {
+    if (!wallet) return;
+
+    // Приводим через unknown для обхода ошибки TS
+    const adapter = wallet as unknown as WalletAdapter;
+
+    const onConnect = () => {
+      if (adapter.publicKey) setPhantomPublicKey(adapter.publicKey.toBase58());
+      console.log('Wallet connect event');
+    };
+
+    const onDisconnect = () => {
+      setPhantomPublicKey(null);
+      console.log('Wallet disconnect event');
+    };
+
+    adapter.on('connect', onConnect);
+    adapter.on('disconnect', onDisconnect);
+
+    return () => {
+      adapter.off('connect', onConnect);
+      adapter.off('disconnect', onDisconnect);
+    };
+  }, [wallet]);
 
   return (
     <div style={{ maxWidth: 400, margin: 'auto', padding: 20 }}>
