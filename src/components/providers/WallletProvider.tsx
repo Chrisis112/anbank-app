@@ -33,7 +33,7 @@ interface Props {
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   const network =
-    process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'https://api.mainnet-beta.solana.com'
+    process.env.NEXT_PUBLIC_SOLANA_NETWORK
       ? WalletAdapterNetwork.Mainnet
       : WalletAdapterNetwork.Devnet;
 
