@@ -1,6 +1,7 @@
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Connection } from '@solana/web3.js';
 import { useState, useCallback, useEffect } from 'react';
+import bs58 from 'bs58';
 
 // Environment variables
 const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
@@ -30,6 +31,47 @@ interface PaymentHookReturn {
   getBalance: () => Promise<number | null>;
   isPhantomInstalled: boolean;
 }
+
+function openPhantomDeepLink({
+    transaction,
+    session,
+    dappEncryptionPublicKey,
+    nonce,
+    redirectLink,
+    sharedSecret,
+}: {
+    transaction: Transaction;         // <-- Вот здесь строго типизируешь!
+    session: string;
+    dappEncryptionPublicKey: string;
+    nonce: string;
+    redirectLink: string;
+    sharedSecret: string;
+}) {
+  // 1. Сериализуем транзакцию
+  const serializedTx = transaction.serialize({ requireAllSignatures: false });
+  const payload = {
+    session,
+    transaction: bs58.encode(serializedTx)
+  };
+
+  // 2. Шифруем payload
+  // Для демонстрации оставим простую сериализацию, production — обязательно шифрование!
+  // const [nonceValue, encryptedPayload] = encryptPayload(payload, sharedSecret);
+  const encryptedPayload = bs58.encode(Buffer.from(JSON.stringify(payload)));
+  const nonceValue = bs58.encode(Buffer.from(nonce));
+
+  // 3. Собираем deeplink
+  const params = new URLSearchParams({
+    dapp_encryption_public_key: dappEncryptionPublicKey, // Для демо: bs58.encode(dappPublicKey)
+    nonce: nonceValue,
+    redirect_link: redirectLink,
+    payload: encryptedPayload,
+  });
+
+  const deeplink = `https://phantom.app/ul/v1/signTransaction?${params.toString()}`;
+  window.open(deeplink, "_blank");
+}
+
 
 // Direct payment method bypassing wallet adapter, used only on some mobile cases
 async function processPaymentDirectly(
@@ -130,7 +172,6 @@ export const usePhantomPayment = (): PaymentHookReturn => {
       return null;
     }
   }, [publicKey, connection]);
-
 const processPayment = useCallback(async (customAmount?: number): Promise<string | null> => {
   if (!connected || !publicKey || !sendTransaction) {
     setPaymentStatus({
@@ -183,41 +224,67 @@ const processPayment = useCallback(async (customAmount?: number): Promise<string
     console.log('User publicKey:', publicKey?.toBase58());
     console.log('Transaction feePayer:', transaction.feePayer?.toBase58());
 
-    const isMobile = typeof window !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isMobile =
+      typeof window !== 'undefined' &&
+      /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
-    let signature: string;
+    let signature: string | null = null;
 
     if (isMobile && wallet && 'signTransaction' in wallet) {
-      console.log('Using mobile wallet flow with direct Phantom signature');
-      signature = await processPaymentDirectly(transaction, connection, publicKey);
+      console.log('Using mobile wallet flow with Phantom deeplink');
+
+      // Здесь нужно определить эти переменные согласно твоей реализации подключения deep link handshake:
+      const phantomSession = 'demo-session-id'; // временно для теста, подставь реальное значение
+      const dappEncryptionPublicKey = 'demo-dapp-public-key'; // base58 public key dapp, получить при connect
+      const nonce = Date.now().toString(); // например, текущее время
+      const redirectLink = window.location.origin + '/phantom-callback'; // страница для возврата после подписи
+      const sharedSecret = 'demo-shared-secret'; // получить при handshake, нужен для шифрования!
+
+      openPhantomDeepLink({
+        transaction,
+        session: phantomSession,
+        dappEncryptionPublicKey,
+        nonce,
+        redirectLink,
+        sharedSecret,
+      });
+
+      setPaymentStatus({
+        signature: null,
+        confirmed: false,
+        error: 'Ожидается подпись через Phantom App. После подписи перейдите обратно.',
+      });
+
+      // Ожидаем, что после возврата на redirectLink будет обработка подписанной транзакции — здесь просто возвращаем null
+      return null;
     } else {
       console.log('Using desktop wallet flow with sendTransaction');
       signature = await sendTransaction(transaction, connection);
-    }
 
-    setPaymentStatus({
-      signature,
-      confirmed: false,
-      error: null,
-    });
-
-    await connection.confirmTransaction(
-      {
+      setPaymentStatus({
         signature,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-      },
-      'confirmed',
-    );
+        confirmed: false,
+        error: null,
+      });
 
-    setPaymentStatus({
-      signature,
-      confirmed: true,
-      error: null,
-    });
+      await connection.confirmTransaction(
+        {
+          signature,
+          blockhash: latestBlockhash.blockhash,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        },
+        'confirmed',
+      );
 
-    console.log(`Payment successful! Signature: ${signature}`);
-    return signature;
+      setPaymentStatus({
+        signature,
+        confirmed: true,
+        error: null,
+      });
+
+      console.log(`Payment successful! Signature: ${signature}`);
+      return signature;
+    }
   } catch (error: any) {
     console.error('Payment failed:', error);
     setPaymentStatus({
