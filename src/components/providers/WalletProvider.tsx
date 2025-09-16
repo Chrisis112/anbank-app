@@ -1,6 +1,5 @@
 import React, { FC, ReactNode, useMemo } from 'react';
 import {
-  Connection,
   clusterApiUrl,
 } from '@solana/web3.js';
 import {
@@ -33,11 +32,11 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  const isMainnet = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase().includes('mainnet-beta') ?? false;
-  const network = isMainnet ? WalletAdapterNetwork.Mainnet : WalletAdapterNetwork.Devnet;
-  const endpoint = useMemo(() => {
-    return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
-  }, [network]);
+  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase() || '';
+  const isMainnet = rpcUrl.includes('mainnet') || rpcUrl.includes('solana-mainnet');
+
+  // Используем кастомный RPC или дефолтный для mainnet/devnet
+  const endpoint = rpcUrl || (isMainnet ? 'https://api.mainnet-beta.solana.com' : clusterApiUrl(WalletAdapterNetwork.Devnet));
 
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({
@@ -59,7 +58,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
       new PhantomWalletAdapter(),
       mobileWalletAdapter,
     ],
-    [network, mobileWalletAdapter]
+    [mobileWalletAdapter]
   );
 
   return (
