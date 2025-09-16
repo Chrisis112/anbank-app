@@ -50,7 +50,12 @@ const endpoint = 'https://api.anbanktoken.com/rpc-proxy';
   ], [mobileWalletAdapter]);
 
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider
+  endpoint={endpoint}
+  config={{
+    wsEndpoint: 'wss://api.anbanktoken.com/rpc-ws', // если поддерживается
+  }}
+>
       <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>
           {children}
