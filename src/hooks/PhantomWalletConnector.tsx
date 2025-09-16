@@ -9,7 +9,6 @@ export default function PhantomWalletConnector() {
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
-const phantomDeepLink = 'https://phantom.app/ul/v1/connect';
 
  const handleConnectWallet = useCallback(async () => {
   if (connected) {
@@ -21,11 +20,12 @@ const phantomDeepLink = 'https://phantom.app/ul/v1/connect';
     /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
   if (isMobile) {
-    // Попробуем открыть Phantom через deeplink
-    window.location.href = 'https://phantom.app/ul/v1/connect';
+    const returnUrl = encodeURIComponent(window.location.href);
+    const phantomDeepLink = `https://phantom.app/ul/v1/connect?app_url=${returnUrl}`;
 
-    // Можно показать уведомление или подсказку
-    toast.info('Откройте Phantom для подключения кошелька');
+    window.location.href = phantomDeepLink;
+
+    toast.info('Пожалуйста, откройте Phantom для подключения кошелька');
     return;
   }
 
@@ -44,7 +44,7 @@ const phantomDeepLink = 'https://phantom.app/ul/v1/connect';
   } finally {
     setIsConnecting(false);
   }
-}, [connect, connected, wallet, walletModal]);
+}, [connected, wallet, walletModal, connect]);
 
 
 useEffect(() => {
