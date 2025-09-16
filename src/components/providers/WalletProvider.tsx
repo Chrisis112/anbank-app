@@ -39,20 +39,21 @@ const endpoint = useMemo(() => {
   return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
 }, [network])
 
-  const mobileWalletAdapter = useMemo(() => {
-    return new SolanaMobileWalletAdapter({
-      appIdentity: {
-        name: 'CryptoChat',
-        uri: typeof window !== 'undefined' ? window.location.origin : 'https://app.anbanktoken.com',
-      },
-      authorizationResultCache: new SimpleAuthorizationResultCache(),
-      addressSelector: createDefaultAddressSelector(),
-      chain: network === WalletAdapterNetwork.Mainnet ? 'mainnet-beta' : 'devnet', // используем chain вместо cluster
-      onWalletNotFound: async () => {
-        alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
-      },
-    });
-  }, [network]);
+const mobileWalletAdapter = useMemo(() => {
+  return new SolanaMobileWalletAdapter({
+    appIdentity: {
+      name: 'CryptoChat',
+      uri: typeof window !== 'undefined' ? window.location.origin : 'https://app.anbanktoken.com',
+
+    },
+    authorizationResultCache: new SimpleAuthorizationResultCache(),
+    addressSelector: createDefaultAddressSelector(),
+    chain: isMainnet ? 'mainnet-beta' : 'devnet',  // ОБЯЗАТЕЛЬНО mainnet-beta для mainnet
+    onWalletNotFound: async () => {
+      alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
+    },
+  });
+}, [isMainnet]);
 
   const wallets = useMemo(
     () => [
