@@ -1,8 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Connection,
   PublicKey,
-  Transaction,
   SystemProgram,
   LAMPORTS_PER_SOL,
   VersionedTransaction,
@@ -25,32 +24,43 @@ export const usePhantomPayment = () => {
   const [error, setError] = useState<string | null>(null);
 
   const { publicKey, sendTransaction, connected, connecting, disconnecting } = useWallet();
-  const { connection } = useConnection();
 
-  const createOptimizedTransaction = useCallback(async (
-    fromPubkey: PublicKey,
-    toPubkey: PublicKey,
-    amount: number,
-    connection: Connection
-  ) => {
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  // Создаем кастомный connection с поддержкой транзакций версии 0
+const customConnection = new Connection(SOLANA_NETWORK, {
+  commitment: 'confirmed',
+  // @ts-ignore
+  maxSupportedTransactionVersion: 0,
+});
 
-    const instructions = [
-      SystemProgram.transfer({
-        fromPubkey,
-        toPubkey,
-        lamports: Math.floor(amount * LAMPORTS_PER_SOL),
-      }),
-    ];
+  const createOptimizedTransaction = useCallback(
+    async (
+      fromPubkey: PublicKey,
+      toPubkey: PublicKey,
+      amount: number,
+      connection: Connection
+    ) => {
+      if (!connection) throw new Error('Connection is undefined');
 
-    const messageV0 = new TransactionMessage({
-      payerKey: fromPubkey,
-      recentBlockhash: blockhash,
-      instructions,
-    }).compileToV0Message();
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-    return new VersionedTransaction(messageV0);
-  }, []);
+      const instructions = [
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports: Math.floor(amount * LAMPORTS_PER_SOL),
+        }),
+      ];
+
+      const messageV0 = new TransactionMessage({
+        payerKey: fromPubkey,
+        recentBlockhash: blockhash,
+        instructions,
+      }).compileToV0Message();
+
+      return new VersionedTransaction(messageV0);
+    },
+    []
+  );
 
   const processPayment = useCallback(async (): Promise<PaymentResult> => {
     setIsLoading(true);
@@ -63,16 +73,16 @@ export const usePhantomPayment = () => {
 
       const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
-      const transaction = await createOptimizedTransaction(publicKey, receiverPublicKey, SOL_AMOUNT, connection);
+      const transaction = await createOptimizedTransaction(publicKey, receiverPublicKey, SOL_AMOUNT, customConnection);
 
       if (!sendTransaction) throw new Error('sendTransaction not available');
 
-      const signature = await sendTransaction(transaction as any, connection, {
+      const signature = await sendTransaction(transaction as any, customConnection, {
         skipPreflight: false,
         preflightCommitment: 'confirmed',
       });
 
-      await connection.confirmTransaction(signature, 'confirmed');
+      await customConnection.confirmTransaction(signature, 'confirmed');
 
       return { signature, success: true };
     } catch (err: any) {
@@ -81,7 +91,7 @@ export const usePhantomPayment = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [connecting, disconnecting, connected, publicKey, createOptimizedTransaction, sendTransaction, connection]);
+  }, [connecting, disconnecting, connected, publicKey, createOptimizedTransaction, sendTransaction]);
 
   return {
     processPayment,

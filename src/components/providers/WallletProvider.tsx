@@ -1,5 +1,9 @@
 import React, { FC, ReactNode, useMemo } from 'react';
 import {
+  Connection,
+  clusterApiUrl,
+} from '@solana/web3.js';
+import {
   ConnectionProvider,
   WalletProvider,
 } from '@solana/wallet-adapter-react';
@@ -8,7 +12,6 @@ import {
   PhantomWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
 
 import {
   SolanaMobileWalletAdapter,
@@ -31,13 +34,13 @@ interface Props {
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   const network =
-    process.env.NEXT_PUBLIC_SOLANA_NETWORK
+    process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'https://api.mainnet-beta.solana.com'
       ? WalletAdapterNetwork.Mainnet
       : WalletAdapterNetwork.Devnet;
 
-  const endpoint = useMemo(() => {
-    return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
-  }, [network]);
+const endpoint = useMemo(() => {
+  return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
+}, [network])
 
   const mobileWalletAdapter = useMemo(() => {
     return new SolanaMobileWalletAdapter({
