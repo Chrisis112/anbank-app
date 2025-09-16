@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import { WalletAdapter } from '@solana/wallet-adapter-base';
 import { toast } from 'react-toastify';
 
 export default function PhantomWalletConnector() {
@@ -54,14 +53,15 @@ export default function PhantomWalletConnector() {
     }
   }, [connected, publicKey]);
 
-  useEffect(() => {
-    if (!wallet) return;
+useEffect(() => {
+  if (!wallet) return;
 
-    // Приводим через unknown для обхода ошибки TS
-    const adapter = wallet as unknown as WalletAdapter;
+  // Приводим к any для обхода ошибки TS
+  const walletAny = wallet as any;
 
+  if (typeof walletAny.on === 'function' && typeof walletAny.off === 'function') {
     const onConnect = () => {
-      if (adapter.publicKey) setPhantomPublicKey(adapter.publicKey.toBase58());
+      if (walletAny.publicKey) setPhantomPublicKey(walletAny.publicKey.toBase58());
       console.log('Wallet connect event');
     };
 
@@ -70,14 +70,17 @@ export default function PhantomWalletConnector() {
       console.log('Wallet disconnect event');
     };
 
-    adapter.on('connect', onConnect);
-    adapter.on('disconnect', onDisconnect);
+    walletAny.on('connect', onConnect);
+    walletAny.on('disconnect', onDisconnect);
 
     return () => {
-      adapter.off('connect', onConnect);
-      adapter.off('disconnect', onDisconnect);
+      walletAny.off('connect', onConnect);
+      walletAny.off('disconnect', onDisconnect);
     };
-  }, [wallet]);
+  }
+
+}, [wallet]);
+
 
   return (
     <div style={{ maxWidth: 400, margin: 'auto', padding: 20 }}>
