@@ -12,11 +12,8 @@ interface Props {
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
   const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || '';
-  const isMainnet = rpcUrl.toLowerCase().includes('mainnet') || rpcUrl.toLowerCase().includes('solana-mainnet');
-
   // Заменили мобильный адаптер на PhantomWalletAdapter
   const wallets = useMemo(() => [
-    new PhantomWalletAdapter(),
     new PhantomWalletAdapter(),
   ], []);
 
@@ -25,15 +22,12 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
     : undefined;
 
   return (
-    <ConnectionProvider 
-      endpoint={rpcUrl}
-      config={wsEndpoint ? { wsEndpoint } : {}}
-    >
-      <WalletProvider wallets={wallets} autoConnect={false}>
-        <WalletModalProvider>
-          {children}
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+<ConnectionProvider endpoint={rpcUrl} config={wsEndpoint ? { wsEndpoint } : {}}>
+  <WalletProvider wallets={wallets} autoConnect={false}>
+    <WalletModalProvider>
+      {children}
+    </WalletModalProvider>
+  </WalletProvider>
+</ConnectionProvider>
   );
 };

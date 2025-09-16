@@ -7,10 +7,11 @@ export default function HomePage() {
   return (
     <>
       <main className="min-h-screen relative overflow-hidden">
+        <RegistrationForm />
         <CryptoBackground />
         {/* Main content */}
         <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
-          <RegistrationForm />
+          
         </div>
       </main>
       {/* Добавляем ToastContainer с базовыми настройками */}
