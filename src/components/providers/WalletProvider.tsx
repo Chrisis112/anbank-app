@@ -3,9 +3,7 @@ import {
   ConnectionProvider,
   WalletProvider,
 } from '@solana/wallet-adapter-react';
-import {
-  PhantomWalletAdapter,
-} from '@solana/wallet-adapter-wallets';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 
 import {
@@ -15,9 +13,7 @@ import {
 } from '@solana-mobile/wallet-adapter-mobile';
 
 class SimpleAuthorizationResultCache implements AuthorizationResultCache {
-  async get() {
-    return null;
-  }
+  async get() { return null; }
   async set() {}
   async delete() {}
   async clear() {}
@@ -26,12 +22,10 @@ class SimpleAuthorizationResultCache implements AuthorizationResultCache {
 interface Props {
   children: ReactNode;
 }
+
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Логика isMainnet понадобится для настройки chain, оставьте
   const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase() || '';
   const isMainnet = rpcUrl.includes('mainnet') || rpcUrl.includes('solana-mainnet');
-
-  // Замена endpoint на ваш прокси сервер для обхода CORS
   const endpoint = 'https://api.anbanktoken.com/rpc-proxy';
 
   const mobileWalletAdapter = useMemo(() => {
@@ -42,19 +36,24 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
       },
       authorizationResultCache: new SimpleAuthorizationResultCache(),
       addressSelector: createDefaultAddressSelector(),
-      chain: isMainnet ? 'mainnet-beta' : 'devnet',  // ОБЯЗАТЕЛЬНО mainnet-beta для mainnet
+      chain: isMainnet ? 'mainnet-beta' : 'devnet',
       onWalletNotFound: async () => {
         alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
       },
     });
   }, [isMainnet]);
 
-const wallets = [new PhantomWalletAdapter()];
+  const wallets = useMemo(() => [
+    new PhantomWalletAdapter(),
+    mobileWalletAdapter,
+  ], [mobileWalletAdapter]);
 
   return (
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect={false}>
-        <WalletModalProvider>{children}</WalletModalProvider>
+        <WalletModalProvider>
+          {children}
+        </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
