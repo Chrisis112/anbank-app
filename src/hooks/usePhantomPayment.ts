@@ -1,4 +1,4 @@
-// hooks/usePhantomPayment.ts
+'use client';
 import { useState, useCallback, useEffect } from 'react';
 import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, VersionedTransaction, TransactionMessage } from '@solana/web3.js';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
