@@ -33,26 +33,26 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-const isMainnet = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase().includes('mainnet-beta') ?? false;
-const network = isMainnet ? WalletAdapterNetwork.Mainnet : WalletAdapterNetwork.Devnet;
-const endpoint = useMemo(() => {
-  return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
-}, [network])
+  const isMainnet = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase().includes('mainnet-beta') ?? false;
+  const network = isMainnet ? WalletAdapterNetwork.Mainnet : WalletAdapterNetwork.Devnet;
+  const endpoint = useMemo(() => {
+    return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
+  }, [network]);
 
-const mobileWalletAdapter = useMemo(() => {
-  return new SolanaMobileWalletAdapter({
-    appIdentity: {name: 'CryptoChat',
-      uri: typeof window !== 'undefined' ? window.location.origin : 'https://app.anbanktoken.com',
-
-    },
-    authorizationResultCache: new SimpleAuthorizationResultCache(),
-    addressSelector: createDefaultAddressSelector(),
-    chain: isMainnet ? 'mainnet-beta' : 'devnet',  // ОБЯЗАТЕЛЬНО mainnet-beta для mainnet
-    onWalletNotFound: async () => {
-      alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
-    },
-  });
-}, [isMainnet]);
+  const mobileWalletAdapter = useMemo(() => {
+    return new SolanaMobileWalletAdapter({
+      appIdentity: {
+        name: 'CryptoChat',
+        uri: typeof window !== 'undefined' ? window.location.origin : 'https://app.anbanktoken.com',
+      },
+      authorizationResultCache: new SimpleAuthorizationResultCache(),
+      addressSelector: createDefaultAddressSelector(),
+      chain: isMainnet ? 'mainnet-beta' : 'devnet',  // ОБЯЗАТЕЛЬНО mainnet-beta для mainnet
+      onWalletNotFound: async () => {
+        alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
+      },
+    });
+  }, [isMainnet]);
 
   const wallets = useMemo(
     () => [
@@ -62,11 +62,11 @@ const mobileWalletAdapter = useMemo(() => {
     [network, mobileWalletAdapter]
   );
 
-return (
-  <ConnectionProvider endpoint={endpoint}>
-    <WalletProvider wallets={wallets} autoConnect={false}>
-      <WalletModalProvider>{children}</WalletModalProvider>
-    </WalletProvider>
-  </ConnectionProvider>
-);
+  return (
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect={false}>
+        <WalletModalProvider>{children}</WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
+  );
 };
