@@ -5,17 +5,6 @@ import {
 } from '@solana/wallet-adapter-react';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import {
-  AuthorizationResultCache,
-} from '@solana-mobile/wallet-adapter-mobile';
-
-
-class SimpleAuthorizationResultCache implements AuthorizationResultCache {
-  async get() { return null; }
-  async set() {}
-  async delete() {}
-  async clear() {}
-}
 
 interface Props {
   children: ReactNode;

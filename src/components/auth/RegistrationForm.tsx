@@ -103,28 +103,56 @@ export default function RegistrationForm() {
       }
 
       // Подключение и оплата для мобильных устройств
-      if (isMobile) {
-        if (!connected) {
-          try {
-            await connect();
-          } catch {
-            toast.error('Please connect your Phantom wallet to proceed.');
-            setRegisterLoading(false);
-            return;
-          }
-        }
+if (isMobile) {
+  if (!connected) {
+    try {
+      await connect();
+    } catch {
+      toast.error('Please connect your Phantom wallet to proceed.');
+      setRegisterLoading(false);
+      return;
+    }
+  }
 
-        const signature = await phantom.processPayment();
-        if (!signature) {
-          toast.error('Payment failed');
-          setRegisterLoading(false);
-          return;
-        }
+  const signature = await phantom.processPayment();
+  if (!signature) {
+    toast.error('Payment failed');
+    setRegisterLoading(false);
+    return;
+  }
 
-        setRegisterLoading(false);
-        toast.success('Payment successful! Please complete your registration.');
-        return;
-      }
+  const solanaPublicKey = phantom.publicKey?.toBase58();
+  if (!solanaPublicKey) {
+    toast.error('Failed to get public key');
+    setRegisterLoading(false);
+    return;
+  }
+const authStore = useAuthStore.getState();
+  // Автоматический вызов регистрации после успешного платежа
+  const result = await authStore.register(
+    data.nickname,
+    data.email,
+    data.password,
+    data.role,
+    solanaPublicKey,
+    signature,
+    promoCode
+  );
+
+  setRegisterLoading(false);
+
+  if (result.success) {
+    localStorage.setItem('token', result.token || '');
+    setUser(result.user ?? null);
+    toast.success('Registration successful!');
+    router.push('/chat');
+  } else {
+    toast.error(result.error || 'Registration failed');
+  }
+
+  return;
+}
+
 
       // Desktop логика
       if (!phantom.isConnected) {
