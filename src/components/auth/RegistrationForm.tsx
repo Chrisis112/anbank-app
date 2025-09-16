@@ -16,6 +16,7 @@ import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import PhantomWalletConnector from '@/hooks/PhantomWalletConnector';
+import { useWallet } from '@solana/wallet-adapter-react';
 
 
 type Role = 'newbie' | 'advertiser' | 'creator';
@@ -41,7 +42,7 @@ export default function RegistrationForm() {
 
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-
+  const { connected, publicKey, connect } = useWallet();
 
   const [loginEmail, setLoginEmail] = useState('');
 
@@ -141,6 +142,15 @@ export default function RegistrationForm() {
         toast.info('Please connect Phantom and then retry registration');
         return;
       } 
+          if (!connected) {
+      // Если кошелек не подключен, принудительно попытайтесь подключиться
+      try {
+        await connect();
+      } catch {
+        alert('Please connect your Phantom wallet to proceed');
+        return;
+      }
+    }
 
       const signature = await phantom.processPayment();
       if (!signature) {
@@ -166,6 +176,7 @@ export default function RegistrationForm() {
         return;
       }
       await phantom.connectWallet();
+      
     }
 
 
@@ -212,6 +223,20 @@ export default function RegistrationForm() {
     toast.error(error?.message || 'Registration failed');
   }
 };
+
+  useEffect(() => {
+    async function tryConnect() {
+      if (!connected && typeof window !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
+        try {
+          await connect();
+        } catch (e) {
+          console.log('User declined wallet connection or error', e);
+        }
+      }
+    }
+    tryConnect();
+  }, [connected, connect]);
+
 
 
 
