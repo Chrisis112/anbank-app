@@ -17,9 +17,9 @@ interface RegistrationFormProps {
   onError?: (error: string) => void;
 }
 
-export const RegistrationForm: React.FC<RegistrationFormProps> = ({ 
-  onSuccess, 
-  onError 
+export const RegistrationForm: React.FC<RegistrationFormProps> = ({
+  onSuccess,
+  onError
 }) => {
   // Состояния формы
   const [formData, setFormData] = useState<RegistrationData>({
@@ -28,18 +28,18 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
     password: '',
     confirmPassword: '',
   });
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<Partial<RegistrationData>>({});
   const [registrationStep, setRegistrationStep] = useState<'form' | 'payment' | 'processing' | 'complete'>('form');
   const [userRegistered, setUserRegistered] = useState(false);
-  
+
   // Wallet и payment хуки
   const { connected, publicKey } = useWallet();
-  const { 
-    processPayment, 
-    isLoading: paymentLoading, 
-    error: paymentError, 
+  const {
+    processPayment,
+    isLoading: paymentLoading,
+    error: paymentError,
     isConnected,
     isMobileDevice,
     clearError,
@@ -60,7 +60,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
       ...prev,
       [name]: value
     }));
-    
+
     // Очищаем ошибку поля при изменении
     if (formErrors[name as keyof RegistrationData]) {
       setFormErrors(prev => ({
@@ -73,29 +73,29 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
   // Валидация формы
   const validateForm = (): boolean => {
     const errors: Partial<RegistrationData> = {};
-    
+
     if (!formData.username.trim()) {
       errors.username = 'Имя пользователя обязательно';
     } else if (formData.username.length < 3) {
       errors.username = 'Имя пользователя должно содержать минимум 3 символа';
     }
-    
+
     if (!formData.email.trim()) {
       errors.email = 'Email обязателен';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errors.email = 'Некорректный формат email';
     }
-    
+
     if (!formData.password) {
       errors.password = 'Пароль обязателен';
     } else if (formData.password.length < 6) {
       errors.password = 'Пароль должен содержать минимум 6 символов';
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       errors.confirmPassword = 'Пароли не совпадают';
     }
-    
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -115,7 +115,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
       return response.data;
     } catch (error: any) {
       console.error('Ошибка регистрации пользователя:', error);
-      
+
       if (error.response?.data?.message) {
         throw new Error(error.response.data.message);
       } else if (error.response?.status === 409) {
@@ -129,16 +129,16 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
   // Обработка отправки формы
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     if (!connected || !publicKey) {
       setRegistrationStep('payment');
       return;
     }
-    
+
     // Если кошелек подключен, переходим к оплате
     await handlePayment();
   };
@@ -155,46 +155,46 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
 
     try {
       console.log('Начинаем обработку платежа...');
-      
+
       // Обрабатываем платеж
       const paymentResult = await processPayment();
-      
+
       if (paymentResult.success && paymentResult.signature) {
         console.log('Платеж успешен, регистрируем пользователя...');
-        
+
         // Регистрируем пользователя с подтверждением оплаты
         const userData = await registerUser(
-          publicKey.toString(), 
+          publicKey.toString(),
           paymentResult.signature
         );
-        
+
         setUserRegistered(true);
         setRegistrationStep('complete');
-        
+
         // Уведомляем родительский компонент об успехе
         if (onSuccess) {
           onSuccess(userData);
         }
-        
+
         console.log('Регистрация завершена успешно!');
-        
+
       } else {
         throw new Error(paymentResult.error || 'Не удалось обработать платеж');
       }
-      
+
     } catch (error: any) {
       console.error('Ошибка в процессе регистрации:', error);
-      
+
       const errorMessage = error.message || 'Произошла ошибка при регистрации';
-      
+
       if (onError) {
         onError(errorMessage);
       }
-      
+
       // Возвращаемся к шагу оплаты для повторной попытки
       setRegistrationStep('payment');
       alert(`Ошибка: ${errorMessage}`);
-      
+
     } finally {
       setIsSubmitting(false);
     }
@@ -216,7 +216,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
   const renderRegistrationForm = () => (
     <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
       <h2 className="text-2xl font-bold text-center mb-6">Регистрация</h2>
-      
+
       <form onSubmit={handleFormSubmit} className="space-y-4">
         <div>
           <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
@@ -313,7 +313,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
   const renderPaymentStep = () => (
     <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
       <h2 className="text-2xl font-bold text-center mb-6">Оплата подписки</h2>
-      
+
       {/* Информация о платформе */}
       {isMobileDevice && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
@@ -322,7 +322,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
           </p>
         </div>
       )}
-      
+
       <div className="bg-gray-50 p-4 rounded-md mb-6">
         <h3 className="font-semibold text-lg mb-2">Премиум подписка</h3>
         <ul className="text-sm text-gray-600 space-y-1 mb-4">
@@ -411,7 +411,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
           Пожалуйста, подождите. Мы обрабатываем ваш платеж и создаем аккаунт.
         </p>
       </div>
-      
+
       <div className="space-y-2 text-sm text-left bg-gray-50 p-4 rounded-md">
         <div className="flex items-center">
           <span className="text-green-500 mr-2">✓</span>
@@ -443,7 +443,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
           Ваш аккаунт успешно создан, и подписка активирована.
         </p>
       </div>
-      
+
       <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
         <h3 className="font-semibold text-green-800 mb-2">Что дальше?</h3>
         <ul className="text-sm text-green-700 space-y-1">
@@ -452,6 +452,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
           <li>• Сохраните данные транзакции для записей</li>
         </ul>
       </div>
+
 
       <button
         onClick={() => window.location.href = '/dashboard'}
@@ -486,13 +487,11 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
           {['form', 'payment', 'processing', 'complete'].map((step, index) => (
             <div
               key={step}
-              className={`flex items-center ${
-                index < 3 ? 'flex-1' : ''
-              }`}
+              className={`flex items-center ${index < 3 ? 'flex-1' : ''}`}
             >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  registrationStep === step || 
+                  registrationStep === step ||
                   (['payment', 'processing', 'complete'].includes(registrationStep) && step === 'form') ||
                   (['processing', 'complete'].includes(registrationStep) && step === 'payment') ||
                   (registrationStep === 'complete' && step === 'processing')
@@ -516,7 +515,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
             </div>
           ))}
         </div>
-        
+
         <div className="flex justify-between text-xs text-gray-600 mt-2">
           <span>Форма</span>
           <span>Оплата</span>
