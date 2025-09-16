@@ -33,11 +33,8 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  const network =
-    process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'https://api.mainnet-beta.solana.com'
-      ? WalletAdapterNetwork.Mainnet
-      : WalletAdapterNetwork.Devnet;
-
+const isMainnet = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.toLowerCase().includes('mainnet-beta') ?? false;
+const network = isMainnet ? WalletAdapterNetwork.Mainnet : WalletAdapterNetwork.Devnet;
 const endpoint = useMemo(() => {
   return process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl(network);
 }, [network])
