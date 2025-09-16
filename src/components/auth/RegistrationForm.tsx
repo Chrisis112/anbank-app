@@ -207,12 +207,14 @@ if (result.success) {
   useEffect(() => {
     // Автоматическая попытка подключения на мобильных устройствах при загрузке компонента
     async function tryConnect() {
-      if (!connected && isMobile) {
-        try {
-          await connect();
-        } catch (e) {
-          console.log('Wallet connection failed or cancelled:', e);
-        }
+if (isMobile && !connected) {
+  const returnUrl = encodeURIComponent(window.location.href);
+  const phantomDeepLink = `https://phantom.app/ul/v1/connect?app_url=${returnUrl}`;
+  window.location.href = phantomDeepLink;
+  toast.info('Пожалуйста, откройте Phantom для подключения кошелька');
+  setRegisterLoading(false);
+  return;
+
       }
     }
     tryConnect();
@@ -266,12 +268,6 @@ if (result.success) {
     setLoginError(null);
   };
 
-
-  const openLoginModal = () => {
-    setIsLoginModalOpen(true);
-    setLoginError(null);
-    setActiveTab('login');
-  };
 
 
   const handleRenewSubscription = async () => {
