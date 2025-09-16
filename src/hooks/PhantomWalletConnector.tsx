@@ -29,10 +29,16 @@ export default function PhantomWalletConnector() {
     return;
   }
 
-  if (!wallet) {
-    walletModal.setVisible(true);
+if (!wallet) {
+  if (typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
+    const returnUrl = encodeURIComponent(window.location.href);
+    window.location.href = `https://phantom.app/ul/v1/connect?app_url=${returnUrl}`;
     return;
   }
+  walletModal.setVisible(true);
+  return;
+}
+
 
   setIsConnecting(true);
   try {
