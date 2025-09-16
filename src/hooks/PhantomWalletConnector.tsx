@@ -8,18 +8,15 @@ export default function PhantomWalletConnector() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
 
-  // Подключение к Phantom Wallet с логами и уведомлениями
   const handleConnectWallet = useCallback(async () => {
     if (connected) {
       toast.info('Phantom Wallet уже подключен');
-      console.log('Phantom already connected:', publicKey?.toBase58());
       return;
     }
 
     setIsConnecting(true);
     try {
       await connect();
-      console.log('Phantom connected, publicKey:', publicKey?.toBase58());
       toast.success('Phantom Wallet успешно подключен!');
     } catch (error) {
       console.error('Ошибка подключения к Phantom:', error);
@@ -27,13 +24,11 @@ export default function PhantomWalletConnector() {
     } finally {
       setIsConnecting(false);
     }
-  }, [connect, connected, publicKey]);
+  }, [connect, connected]); // убрали publicKey из зависимостей
 
-  // Отключение кошелька с логами
   const handleDisconnectWallet = useCallback(async () => {
     try {
       await disconnect();
-      console.log('Phantom Wallet отключен');
       toast.info('Phantom Wallet отключен');
       setPhantomPublicKey(null);
     } catch (error) {
@@ -41,12 +36,11 @@ export default function PhantomWalletConnector() {
     }
   }, [disconnect]);
 
-  // Синхронизация локального состояния с провайдером
   useEffect(() => {
     if (connected && publicKey) {
       const pkStr = publicKey.toBase58();
       setPhantomPublicKey(pkStr);
-      console.log('Wallet connected: ', pkStr);
+      console.log('Wallet connected:', pkStr);
     } else {
       setPhantomPublicKey(null);
       console.log('Wallet disconnected or not connected');
