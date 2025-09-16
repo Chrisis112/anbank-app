@@ -11,12 +11,10 @@ import { usePhantomPayment } from '@/hooks/usePhantomPayment';
 import { checkUnique, registerUser, loginUser, renewSubscription } from '@/utils/api';
 import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
-import * as Linking from 'expo-linking';
+
 import { decryptPayload } from '@/utils/decryptPayload';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
-
-const onSignAndSendTransactionRedirectLink = Linking.createURL("onSignAndSendTransaction");
 
 export default function RegistrationForm() {
   const router = useRouter();
@@ -46,21 +44,25 @@ export default function RegistrationForm() {
   const [deepLink, setDeepLink] = useState<string>("");
 
   // Обработка deeplinks для платежей
-  useEffect(() => {
-    const initializeDeeplinks = async () => {
-      const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) {
-        setDeepLink(initialUrl);
-      }
-    };
+useEffect(() => {
+  // Инициализация текущего URL при загрузке компонента
+  if (typeof window !== 'undefined') {
+    setDeepLink(window.location.href);
+  }
 
-    initializeDeeplinks();
-    const listener = Linking.addEventListener("url", handleDeepLink);
+  // Функция для обновления deepLink при изменении URL
+  const handleDeepLink = () => {
+    setDeepLink(window.location.href);
+  };
 
-    return () => {
-      listener.remove();
-    };
-  }, []);
+  // Подписка на изменение истории браузера
+  window.addEventListener('popstate', handleDeepLink);
+
+  // Очистка подписки при размонтировании
+  return () => {
+    window.removeEventListener('popstate', handleDeepLink);
+  };
+}, []);
 
   const handleDeepLink = ({ url }: { url: string }) => {
     setDeepLink(url);
