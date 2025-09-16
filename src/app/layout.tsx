@@ -7,11 +7,12 @@ import '../styles/components.css';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { WalletProvider } from '@solana/wallet-adapter-react';
+import { ConnectionContext, ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { PhantomWalletAdapter, SolflareWalletAdapter, TorusWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import { clusterApiUrl } from '@solana/web3.js';
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // Создаем массив кошельков
+const endpoint = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl('mainnet-beta')
   const wallets = [
     new PhantomWalletAdapter(),
     new SolflareWalletAdapter({ network: WalletAdapterNetwork.Mainnet }),
@@ -38,12 +39,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        
+        <ConnectionProvider endpoint={endpoint}>
         <WalletProvider wallets={wallets} autoConnect>
           <WalletModalProvider>
           {children}
           </WalletModalProvider>
         </WalletProvider>
+        </ConnectionProvider>
       </body>
     </html>
   );
