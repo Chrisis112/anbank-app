@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'react-toastify';
 
 export default function PhantomWalletConnector() {
-  const { connected, publicKey, connect, disconnect } = useWallet();
+  const { wallet, connected, publicKey, connect, disconnect } = useWallet();
+  const walletModal = useWalletModal();
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [phantomPublicKey, setPhantomPublicKey] = useState<string | null>(null);
@@ -11,6 +13,11 @@ export default function PhantomWalletConnector() {
   const handleConnectWallet = useCallback(async () => {
     if (connected) {
       toast.info('Phantom Wallet уже подключен');
+      return;
+    }
+
+    if (!wallet) {
+      walletModal.setVisible(true); // Показываем модальное окно выбора кошелька
       return;
     }
 
@@ -24,7 +31,7 @@ export default function PhantomWalletConnector() {
     } finally {
       setIsConnecting(false);
     }
-  }, [connect, connected]); // убрали publicKey из зависимостей
+  }, [connect, connected, wallet, walletModal]);
 
   const handleDisconnectWallet = useCallback(async () => {
     try {
