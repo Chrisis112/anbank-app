@@ -49,13 +49,7 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
     });
   }, [isMainnet]);
 
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      mobileWalletAdapter,
-    ],
-    [mobileWalletAdapter]
-  );
+const wallets = [new PhantomWalletAdapter()];
 
   return (
     <ConnectionProvider endpoint={endpoint}>
