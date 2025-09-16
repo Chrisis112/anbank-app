@@ -4,11 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 
-
 import RegisterForm from './RegisterForm';
 import LoginModal from './LoginModal';
 import SubscriptionModal from './SubscriptionModal';
-
 
 import { usePhantomPayment } from '@/hooks/usePhantomPayment';
 import { checkUnique, registerUser, loginUser, renewSubscription } from '@/utils/api';
@@ -18,92 +16,148 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import PhantomWalletConnector from '@/hooks/PhantomWalletConnector';
 import { useWallet } from '@solana/wallet-adapter-react';
 
-
 type Role = 'newbie' | 'advertiser' | 'creator';
 
-
 export default function RegistrationForm() {
-  const router = useRouter();
-  const register = useAuthStore(state => state.register);
-  const { setUser } = useUserStore();
+  const router = useRouter();
+  const { setUser } = useUserStore();
+  const phantom = usePhantomPayment();
+  const walletModal = useWalletModal();
+  const { connected, connect } = useWallet();
 
+  const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
-  const phantom = usePhantomPayment();
-  const walletModal = useWalletModal();
+  const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
 
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [promoCode, setPromoCode] = useState<string | null>(null);
+  const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
 
-  const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  const handlePromoSuccess = (code: string) => {
+    setPromoCode(code);
+    setPromoCodeError(null);
+  };
 
+  const handlePromoFail = (message: string) => {
+    setPromoCode(null);
+    setPromoCodeError(message);
+  };
 
-  const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  const handleRegisterSubmit = async (data: {
+    nickname: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+    role: Role;
+    promoCode: string | null;
+  }) => {
+    setRegisterLoading(true);
 
+    if (data.password !== data.confirmPassword) {
+      toast.error('Passwords do not match');
+      setRegisterLoading(false);
+      return;
+    }
 
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const { connected, publicKey, connect } = useWallet();
+    const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
+    if (emailExists) {
+      toast.error('Email is already in use');
+      setRegisterLoading(false);
+      return;
+    }
+    if (nicknameExists) {
+      toast.error('Nickname is already in use');
+      setRegisterLoading(false);
+      return;
+    }
 
-  const [loginEmail, setLoginEmail] = useState('');
+    try {
+      if (data.promoCode) {
+        // Регистрация без оплаты (например, с промокодом)
+        const result = await registerUser({
+          nickname: data.nickname,
+          email: data.email,
+          password: data.password,
+          role: data.role,
+          promoCode: data.promoCode,
+          solanaPublicKey: null,
+          paymentSignature: null,
+        });
 
+        setRegisterLoading(false);
 
-  const [registerLoading, setRegisterLoading] = useState(false);
+        if (result.success) {
+          localStorage.setItem('token', result.token || '');
+          setUser(result.user);
+          toast.success('Registration successful!');
+          router.push('/chat');
+        } else {
+          toast.error(result.error || 'Registration failed');
+        }
+        return;
+      }
 
+      // Подключение и оплата для мобильных устройств
+      if (isMobile) {
+        if (!connected) {
+          try {
+            await connect();
+          } catch {
+            toast.error('Please connect your Phantom wallet to proceed.');
+            setRegisterLoading(false);
+            return;
+          }
+        }
 
-  const [promoCode, setPromoCode] = useState<string | null>(null);
-  const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
+        const signature = await phantom.processPayment();
+        if (!signature) {
+          toast.error('Payment failed');
+          setRegisterLoading(false);
+          return;
+        }
 
+        setRegisterLoading(false);
+        toast.success('Payment successful! Please complete your registration.');
+        return;
+      }
 
-  const handlePromoSuccess = (code: string) => {
-    setPromoCode(code);
-    setPromoCodeError(null);
-  };
+      // Desktop логика
+      if (!phantom.isConnected) {
+        if (!phantom.publicKey) {
+          walletModal.setVisible(true);
+          setRegisterLoading(false);
+          return;
+        }
+        await phantom.connectWallet();
+      }
 
+      const signature = await phantom.processPayment();
+      if (!signature) {
+        toast.error('Payment failed');
+        setRegisterLoading(false);
+        return;
+      }
 
-  const handlePromoFail = (message: string) => {
-    setPromoCode(null);
-    setPromoCodeError(message);
-  };
+      const solanaPublicKey = phantom.publicKey?.toBase58();
+      if (!solanaPublicKey) {
+        toast.error('Failed to get public key');
+        setRegisterLoading(false);
+        return;
+      }
 
-
- const handleRegisterSubmit = async (data: {
-  nickname: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-  role: Role;
-  promoCode: string | null;
-}) => {
-  setRegisterLoading(true);
-
-  if (data.password !== data.confirmPassword) {
-    toast.error('Passwords do not match');
-    setRegisterLoading(false);
-    return;
-  }
-
-  const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
-  if (emailExists) {
-    toast.error('Email is already in use');
-    setRegisterLoading(false);
-    return;
-  }
-  if (nicknameExists) {
-    toast.error('Nickname is already in use');
-    setRegisterLoading(false);
-    return;
-  }
-
-  try {
-    if (data.promoCode) {
       const result = await registerUser({
         nickname: data.nickname,
         email: data.email,
         password: data.password,
         role: data.role,
-        promoCode: data.promoCode,
-        solanaPublicKey: null,
-        paymentSignature: null,
+        solanaPublicKey,
+        paymentSignature: signature,
+        promoCode: null,
       });
 
       setRegisterLoading(false);
@@ -116,105 +170,25 @@ export default function RegistrationForm() {
       } else {
         toast.error(result.error || 'Registration failed');
       }
-
-      return;
-    }
-
-
-    // Mobile flow
-if (isMobile) {
-  if (!connected) {
-    try {
-      await connect();
-    } catch {
-      toast.error('Please connect your Phantom wallet to proceed.');
+    } catch (error: any) {
       setRegisterLoading(false);
-      return;
+      toast.error(error?.message || 'Registration failed');
     }
-  }
-
-  // Теперь кошелек подключен, вызываем оплату
-  const signature = await phantom.processPayment();
-  if (!signature) {
-    toast.error('Payment failed');
-    setRegisterLoading(false);
-    return;
-  }
-
-  setRegisterLoading(false);
-  toast.info('Payment is in progress in the Phantom app. After completion, return here to continue.');
-  return;
-}
-
-    // Desktop flow
-    if (!phantom.isConnected) {
-      if (!phantom.publicKey) {
-        walletModal.setVisible(true);
-        setRegisterLoading(false);
-        return;
-      }
-      await phantom.connectWallet();
-      
-    }
-
-
-    const signature = await phantom.processPayment();
-    if (!signature) {
-      toast.error('Payment failed');
-      setRegisterLoading(false);
-      return;
-    }
-
-
-    const solanaPublicKey = phantom.publicKey?.toBase58();
-    if (!solanaPublicKey) {
-      toast.error('Failed to get public key');
-      setRegisterLoading(false);
-      return;
-    }
-
-
-    const result = await registerUser({
-      nickname: data.nickname,
-      email: data.email,
-      password: data.password,
-      role: data.role,
-      solanaPublicKey,
-      paymentSignature: signature,
-      promoCode: null,
-    });
-
-
-    setRegisterLoading(false);
-
-
-    if (result.success) {
-      localStorage.setItem('token', result.token || '');
-      setUser(result.user);
-      toast.success('Registration successful!');
-      router.push('/chat');
-    } else {
-      toast.error(result.error || 'Registration failed');
-    }
-  } catch (error: any) {
-    setRegisterLoading(false);
-    toast.error(error?.message || 'Registration failed');
-  }
-};
+  };
 
   useEffect(() => {
+    // Автоматическая попытка подключения на мобильных устройствах при загрузке компонента
     async function tryConnect() {
-      if (!connected && typeof window !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      if (!connected && isMobile) {
         try {
           await connect();
         } catch (e) {
-          console.log('User declined wallet connection or error', e);
+          console.log('Wallet connection failed or cancelled:', e);
         }
       }
     }
     tryConnect();
-  }, [connected, connect]);
-
+  }, [connected, connect, isMobile]);
 
 
 
@@ -323,58 +297,56 @@ if (isMobile) {
   }, []);
 
 
-  return (
-    <>
-      <div className="bg-crypto-dark min-h-screen flex items-center justify-center px-4">
-        <div className="w-full max-w-xl mx-auto px-6 py-8 rounded-xl shadow-2xl bg-crypto-dark">
-          <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
-            CryptoChat
-          </h1>
-          <PhantomWalletConnector/>
-          {/* Tab Switcher */}
-          <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
-            <button
-              className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'register'
-                  ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#6481f5_100%)] text-white'
-                  : 'bg-transparent text-gray-300'
-              }`}
-              onClick={() => setActiveTab('register')}
-              type="button"
-            >
-              Register
-            </button>
-            <button
-              className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'login'
-                  ? 'bg-[linear-gradient(90deg,#191b1f_0%,#232531_100%)] text-white'
-                  : 'bg-transparent text-gray-300'
-              }`}
-              onClick={() => {
-                setActiveTab('login');
-                openLoginModal();
-              }}
-              type="button"
-            >
-              Login
-            </button>
-          </div>
+  return (
+    <>
+      <div className="bg-crypto-dark min-h-screen flex items-center justify-center px-4">
+        <div className="w-full max-w-xl mx-auto px-6 py-8 rounded-xl shadow-2xl bg-crypto-dark">
+          <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
+            CryptoChat
+          </h1>
+          <PhantomWalletConnector />
+          {/* Tab Switcher */}
+          <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
+            <button
+              className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                activeTab === 'register'
+                  ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#6481f5_100%)] text-white'
+                  : 'bg-transparent text-gray-300'
+              }`}
+              onClick={() => setActiveTab('register')}
+              type="button"
+            >
+              Register
+            </button>
+            <button
+              className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                activeTab === 'login'
+                  ? 'bg-[linear-gradient(90deg,#191b1f_0%,#232531_100%)] text-white'
+                  : 'bg-transparent text-gray-300'
+              }`}
+              onClick={() => {
+                setActiveTab('login');
+                setIsLoginModalOpen(true);
+              }}
+              type="button"
+            >
+              Login
+            </button>
+          </div>
 
-
-          {activeTab === 'register' && (
-            <RegisterForm
-              onSubmit={handleRegisterSubmit}
-              loading={registerLoading}
-              onPromoSuccess={handlePromoSuccess}
-              onPromoFail={handlePromoFail}
-              initialNickname=""
-              initialEmail=""
-              initialRole="newbie"
-            />
-          )}
-        </div>
-      </div>
-
+          {activeTab === 'register' && (
+            <RegisterForm
+              onSubmit={handleRegisterSubmit}
+              loading={registerLoading}
+              onPromoSuccess={handlePromoSuccess}
+              onPromoFail={handlePromoFail}
+              initialNickname=""
+              initialEmail=""
+              initialRole="newbie"
+            />
+          )}
+        </div>
+      </div>
 
       {/* Login Modal */}
       <LoginModal
