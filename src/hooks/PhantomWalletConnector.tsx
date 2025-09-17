@@ -11,6 +11,7 @@ interface PhantomWalletConnectorReturn {
   phantomWalletPublicKey: PublicKey | null;
   isConnected: boolean;
   isConnecting: boolean;
+  setPhantomWalletPublicKey: (key: PublicKey | null) => void;
   session: string | undefined;
   sharedSecret: Uint8Array | undefined;
   dappKeyPair: nacl.BoxKeyPair | null;
@@ -26,7 +27,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const [deepLink, setDeepLink] = useState<string>('');
   const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair | null>(null);
 
-  // Загружаем / создаём dappKeyPair один раз
+  // Инициализация dappKeyPair один раз
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -36,7 +37,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         const secretKey = bs58.decode(saved);
         setDappKeyPair({
           secretKey,
-          publicKey: secretKey.slice(0, 32), // ВАЖНО: первые 32 байта - публичный ключ
+          publicKey: secretKey.slice(0, 32),
         });
       } else {
         const newKeyPair = nacl.box.keyPair();
@@ -53,7 +54,6 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const onConnectRedirectLink = Linking.createURL('onConnect');
   const onDisconnectRedirectLink = Linking.createURL('onDisconnect');
 
-  // Обработка deeplink
   const handleDeepLink = useCallback(({ url }: { url: string }) => {
     setDeepLink(url);
   }, []);
@@ -69,7 +69,6 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     return () => subscription?.remove();
   }, [handleDeepLink]);
 
-  // Обработка получения данных о подключении / отключении через deeplink
   useEffect(() => {
     if (!deepLink || !dappKeyPair) return;
 
@@ -90,6 +89,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
           bs58.decode(params.get('phantom_encryption_public_key')!),
           dappKeyPair.secretKey
         );
+
         const connectData = decryptPayload(
           params.get('data')!,
           params.get('nonce')!,
@@ -117,7 +117,21 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     }
   }, [deepLink, dappKeyPair]);
 
-  // Функция подключения кошелька
+  // Восстановление публичного ключа из localStorage при загрузке страницы
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const storedPhantomKey = localStorage.getItem('phantom_public_key');
+    if (storedPhantomKey) {
+      try {
+        setPhantomWalletPublicKey(new PublicKey(storedPhantomKey));
+      } catch {
+        localStorage.removeItem('phantom_public_key');
+        setPhantomWalletPublicKey(null);
+      }
+    }
+  }, []);
+
   const connectWallet = useCallback(async () => {
     try {
       setIsConnecting(true);
@@ -127,7 +141,6 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         setPhantomWalletPublicKey(new PublicKey(resp.publicKey.toString()));
         localStorage.setItem('phantom_public_key', resp.publicKey.toString());
 
-        // Синхронно подгружаем dappKeyPair, если не инициализирован
         if (!dappKeyPair) {
           const savedKey = localStorage.getItem('dappKeyPair_secretKey');
           let newDappKeyPair: nacl.BoxKeyPair;
@@ -163,22 +176,6 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     }
   }, [dappKeyPair, onConnectRedirectLink]);
 
-  // Восстановление публичного ключа из localStorage при загрузке страницы
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const storedPhantomKey = localStorage.getItem('phantom_public_key');
-    if (storedPhantomKey) {
-      try {
-        setPhantomWalletPublicKey(new PublicKey(storedPhantomKey));
-      } catch {
-        localStorage.removeItem('phantom_public_key');
-        setPhantomWalletPublicKey(null);
-      }
-    }
-  }, []);
-
-  // Функция отключения кошелька
   const disconnectWallet = useCallback(() => {
     setPhantomWalletPublicKey(null);
     setSession(undefined);
@@ -191,6 +188,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     phantomWalletPublicKey,
     isConnected: !!phantomWalletPublicKey,
     isConnecting,
+    setPhantomWalletPublicKey,
     session,
     sharedSecret,
     dappKeyPair,

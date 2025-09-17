@@ -30,6 +30,7 @@ export default function RegistrationForm() {
     dappKeyPair,
     connectWallet,
     disconnectWallet,
+    setPhantomWalletPublicKey,
   } = PhantomWalletConnector();
 
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
@@ -45,7 +46,19 @@ export default function RegistrationForm() {
   const [pendingRegistrationData, setPendingRegistrationData] = useState<any>(null);
 
   const [shouldRegisterAfterConnect, setShouldRegisterAfterConnect] = useState(false);
-const [registerDataAfterConnect, setRegisterDataAfterConnect] = useState<any>(null);
+  const [registerDataAfterConnect, setRegisterDataAfterConnect] = useState<any>(null);
+
+  // Восстановление phantomWalletPublicKey из localStorage при загрузке страницы
+  useEffect(() => {
+    const savedKey = localStorage.getItem('phantom_public_key');
+    if (savedKey) {
+      try {
+        setPhantomWalletPublicKey(new window.solana.PublicKey(savedKey));
+      } catch {
+        localStorage.removeItem('phantom_public_key');
+      }
+    }
+  }, [setPhantomWalletPublicKey]);
 
   // Обработка deeplinks для платежей
   useEffect(() => {
@@ -62,16 +75,16 @@ const [registerDataAfterConnect, setRegisterDataAfterConnect] = useState<any>(nu
     return () => subscription?.remove();
   }, []);
 
+  // Вызов регистрации после подключения кошелька
   useEffect(() => {
-  if (isConnected && shouldRegisterAfterConnect && registerDataAfterConnect) {
-    // Вызывать регистрацию повторно, когда кошелек подключён
-    handleRegisterSubmit(registerDataAfterConnect);
-    setShouldRegisterAfterConnect(false);
-    setRegisterDataAfterConnect(null);
-  }
-}, [isConnected, shouldRegisterAfterConnect, registerDataAfterConnect]);
+    if (isConnected && shouldRegisterAfterConnect && registerDataAfterConnect) {
+      handleRegisterSubmit(registerDataAfterConnect);
+      setShouldRegisterAfterConnect(false);
+      setRegisterDataAfterConnect(null);
+    }
+  }, [isConnected, shouldRegisterAfterConnect, registerDataAfterConnect]);
 
-  // Обработка результата транзакции
+  // Обработка результата транзакции через deeplink
   useEffect(() => {
     if (!deepLink || !sharedSecret) return;
 
@@ -89,7 +102,7 @@ const [registerDataAfterConnect, setRegisterDataAfterConnect] = useState<any>(nu
         console.log('Transaction completed:', signAndSendTransactionData);
 
         if (signAndSendTransactionData.signature) {
-          toast.success(`Платеж успешно обработан!`);
+          toast.success('Платеж успешно обработан!');
 
           if (pendingRegistrationData) {
             completeRegistration(pendingRegistrationData, signAndSendTransactionData.signature);
@@ -146,115 +159,115 @@ const [registerDataAfterConnect, setRegisterDataAfterConnect] = useState<any>(nu
     setPromoCodeError(message);
   };
 
-const handleRegisterSubmit = async (data: {
-  nickname: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-  role: Role;
-  promoCode: string | null;
-}) => {
-  setRegisterLoading(true);
+  const handleRegisterSubmit = async (data: {
+    nickname: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+    role: Role;
+    promoCode: string | null;
+  }) => {
+    setRegisterLoading(true);
 
-  if (data.password !== data.confirmPassword) {
-    toast.error('Пароли не совпадают');
-    setRegisterLoading(false);
-    return;
-  }
-
-  const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
-
-  if (emailExists) {
-    toast.error('Email уже используется');
-    setRegisterLoading(false);
-    return;
-  }
-
-  if (nicknameExists) {
-    toast.error('Никнейм уже используется');
-    setRegisterLoading(false);
-    return;
-  }
-
-  // Проверяем наличие Phantom и его расширение в браузере (desktop)
-  const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
-
-  try {
-    if (data.promoCode) {
-      // Регистрация с промокодом без оплаты
-      const result = await registerUser({
-        nickname: data.nickname,
-        email: data.email,
-        password: data.password,
-        role: data.role,
-        promoCode: data.promoCode,
-        solanaPublicKey: null,
-        paymentSignature: null,
-      });
+    if (data.password !== data.confirmPassword) {
+      toast.error('Пароли не совпадают');
       setRegisterLoading(false);
-
-      if (result.success) {
-        localStorage.setItem('token', result.token || '');
-        setUser(result.user);
-        toast.success('Регистрация успешна!');
-        router.push('/chat');
-      } else {
-        toast.error(result.error || 'Ошибка регистрации');
-      }
       return;
     }
 
-    if (!isConnected) {
-      if (!isPhantomInstalled) {
-        toast.info(
-          <>
-            Чтобы подключить Phantom Wallet, установите расширение для браузера или приложение mobile Phantom:
-            <br />
-            <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
-              https://phantom.app/download
-            </a>
-          </>
-        );
+    const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
+
+    if (emailExists) {
+      toast.error('Email уже используется');
+      setRegisterLoading(false);
+      return;
+    }
+
+    if (nicknameExists) {
+      toast.error('Никнейм уже используется');
+      setRegisterLoading(false);
+      return;
+    }
+
+    // Проверяем наличие Phantom и его расширение в браузере (desktop)
+    const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
+
+    try {
+      if (data.promoCode) {
+        // Регистрация с промокодом без оплаты
+        const result = await registerUser({
+          nickname: data.nickname,
+          email: data.email,
+          password: data.password,
+          role: data.role,
+          promoCode: data.promoCode,
+          solanaPublicKey: null,
+          paymentSignature: null,
+        });
+        setRegisterLoading(false);
+
+        if (result.success) {
+          localStorage.setItem('token', result.token || '');
+          setUser(result.user);
+          toast.success('Регистрация успешна!');
+          router.push('/chat');
+        } else {
+          toast.error(result.error || 'Ошибка регистрации');
+        }
+        return;
+      }
+
+      if (!isConnected) {
+        if (!isPhantomInstalled) {
+          toast.info(
+            <>
+              Чтобы подключить Phantom Wallet, установите расширение для браузера или приложение mobile Phantom:
+              <br />
+              <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
+                https://phantom.app/download
+              </a>
+            </>
+          );
+          setRegisterLoading(false);
+          return;
+        }
+
+        // Запускаем подключение кошелька и ожидаем успешное подключение
+        setShouldRegisterAfterConnect(true);
+        setRegisterDataAfterConnect(data);
+
+        toast.info('Сначала подключите Phantom Wallet');
+        await connectWallet();
         setRegisterLoading(false);
         return;
       }
 
-      // Запускаем подключение кошелька и ожидаем успешное подключение
-      setShouldRegisterAfterConnect(true);
-      setRegisterDataAfterConnect(data);
+      // Убеждаемся, что кошелек полностью подключен
+      if (!phantomWalletPublicKey || !session || !sharedSecret) {
+        toast.error('Phantom Wallet не подключен. Пожалуйста, снова нажмите "Подключить Phantom"');
+        setRegisterLoading(false);
+        return;
+      }
 
-      toast.info('Сначала подключите Phantom Wallet');
-      await connectWallet();
+      // Сохраняем данные регистрации для обработки после платежа
+      setPendingRegistrationData(data);
+
+      // Инициируем платеж через Phantom
+      await processPayment({
+        phantomWalletPublicKey,
+        session: session!,
+        sharedSecret: sharedSecret!,
+        dappKeyPair: dappKeyPair!, // Уверены, что не null
+        token: localStorage.getItem('token') || '',
+      });
+
+      toast.info('Ожидание подтверждения транзакции...');
+    } catch (error: any) {
       setRegisterLoading(false);
-      return;
+      setPendingRegistrationData(null);
+      toast.error(error?.message || 'Ошибка регистрации');
     }
-
-    // Убеждаемся, что кошелек полностью подключен
-    if (!phantomWalletPublicKey || !session || !sharedSecret) {
-      toast.error('Phantom Wallet не подключен. Пожалуйста, снова нажмите "Подключить Phantom"');
-      setRegisterLoading(false);
-      return;
-    }
-
-    // Сохраняем данные регистрации для обработки после платежа
-    setPendingRegistrationData(data);
-
-    // Инициируем платеж через Phantom
-    await processPayment({
-      phantomWalletPublicKey,
-      session: session!,
-      sharedSecret: sharedSecret!,
-      dappKeyPair: dappKeyPair!, // Уверены, что не null
-      token: localStorage.getItem('token') || '',
-    });
-
-    toast.info('Ожидание подтверждения транзакции...');
-  } catch (error: any) {
-    setRegisterLoading(false);
-    setPendingRegistrationData(null);
-    toast.error(error?.message || 'Ошибка регистрации');
-  }
-};
+  };
 
   const handleLoginSubmit = async (email: string, password: string) => {
     setLoginLoading(true);
@@ -326,7 +339,9 @@ const handleRegisterSubmit = async (data: {
       toast.error(error.message || 'Ошибка продления подписки');
     }
   };
-    const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
+
+  const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
+
   return (
     <>
       <div className="bg-crypto-dark min-h-screen flex items-center justify-center px-4">
@@ -337,13 +352,9 @@ const handleRegisterSubmit = async (data: {
 
           {/* Статус подключения Phantom */}
           <div className="mb-4 text-center">
-            <p className="text-sm text-gray-400">
-              Phantom: {isConnected ? 'Подключен' : 'Не подключен'}
-            </p>
+            <p className="text-sm text-gray-400">Phantom: {isConnected ? 'Подключен' : 'Не подключен'}</p>
             {phantomWalletPublicKey && (
-              <p className="text-xs text-gray-500 break-all">
-                {phantomWalletPublicKey.toBase58().slice(0, 20)}...
-              </p>
+              <p className="text-xs text-gray-500 break-all">{phantomWalletPublicKey.toBase58().slice(0, 20)}...</p>
             )}
             {!isConnected && (
               <>
