@@ -13,7 +13,7 @@ interface PhantomWalletConnectorReturn {
   isConnecting: boolean;
   session: string | undefined;
   sharedSecret: Uint8Array | undefined;
-  dappKeyPair: nacl.BoxKeyPair;
+  dappKeyPair: nacl.BoxKeyPair | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
 }
@@ -24,35 +24,40 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const [session, setSession] = useState<string>();
   const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
   const [deepLink, setDeepLink] = useState<string>('');
-  // Инициализация dappKeyPair из localStorage или генерация нового
-  const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair>(() => {
+  const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair | null>(null);
+
+  // Генерация/загрузка dappKeyPair только на клиенте
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     try {
       const saved = localStorage.getItem('dappKeyPair_secretKey');
       if (saved) {
         const secretKey = bs58.decode(saved);
-        return {
-          publicKey: secretKey.slice(32),
+        setDappKeyPair({
           secretKey,
-        };
+          publicKey: secretKey.slice(32),
+        });
+      } else {
+        const newKeyPair = nacl.box.keyPair();
+        localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newKeyPair.secretKey));
+        setDappKeyPair(newKeyPair);
       }
     } catch {
-      // Игнорируем ошибки
+      // Если ошибка, создадим новый ключ
+      const newKeyPair = nacl.box.keyPair();
+      localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newKeyPair.secretKey));
+      setDappKeyPair(newKeyPair);
     }
-    const newKeyPair = nacl.box.keyPair();
-    localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newKeyPair.secretKey));
-    return newKeyPair;
-  });
+  }, []);
 
-  // Создание redirect ссылок
   const onConnectRedirectLink = Linking.createURL('onConnect');
   const onDisconnectRedirectLink = Linking.createURL('onDisconnect');
 
-  // Обработчик deeplinks
   const handleDeepLink = useCallback(({ url }: { url: string }) => {
     setDeepLink(url);
   }, []);
 
-  // Инициализация deeplink слушателя
   useEffect(() => {
     const initializeDeeplinks = async () => {
       const initialUrl = await Linking.getInitialURL();
@@ -61,21 +66,18 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
       }
     };
     initializeDeeplinks();
+
     const subscription = Linking.addEventListener('url', handleDeepLink);
-    return () => {
-      subscription?.remove();
-    };
+    return () => subscription?.remove();
   }, [handleDeepLink]);
 
-  // Обработка входящих deeplinks
   useEffect(() => {
-    if (!deepLink) return;
+    if (!deepLink || !dappKeyPair) return; // ждем dappKeyPair
 
     try {
       const url = new URL(deepLink);
       const params = url.searchParams;
 
-      // Обработка ошибок от Phantom
       if (params.get('errorCode')) {
         const error = Object.fromEntries([...params]);
         const message = error?.errorMessage ?? 'Unknown error';
@@ -84,7 +86,6 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         return;
       }
 
-      // Обработка успешного подключения
       if (/onConnect/.test(url.pathname)) {
         const sharedSecretDapp = nacl.box.before(
           bs58.decode(params.get('phantom_encryption_public_key')!),
@@ -95,6 +96,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
           params.get('nonce')!,
           sharedSecretDapp
         );
+
         setSharedSecret(sharedSecretDapp);
         setSession(connectData.session);
         setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
@@ -103,7 +105,6 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         return;
       }
 
-      // Обработка отключения
       if (/onDisconnect/.test(url.pathname)) {
         setPhantomWalletPublicKey(null);
         setSession(undefined);
@@ -115,10 +116,13 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
       console.error('Error processing deeplink:', error);
       setIsConnecting(false);
     }
-  }, [deepLink, dappKeyPair.secretKey]);
+  }, [deepLink, dappKeyPair]);
 
-  // Функция подключения к Phantom
   const connectWallet = useCallback(async () => {
+    if (!dappKeyPair) {
+      console.error('DappKeyPair is not initialized yet');
+      return;
+    }
     try {
       setIsConnecting(true);
       const params = new URLSearchParams({
@@ -133,9 +137,8 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
       console.error('Error connecting to Phantom:', error);
       setIsConnecting(false);
     }
-  }, [dappKeyPair.publicKey, onConnectRedirectLink]);
+  }, [dappKeyPair, onConnectRedirectLink]);
 
-  // Функция отключения от Phantom
   const disconnectWallet = useCallback(() => {
     setPhantomWalletPublicKey(null);
     setSession(undefined);

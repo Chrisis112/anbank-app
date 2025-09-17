@@ -216,13 +216,14 @@ const result = await authStore.register(
       setPendingRegistrationData(data);
 
       // Инициируем платеж
-   await processPayment({
+await processPayment({
   phantomWalletPublicKey,
-  session,
-  sharedSecret,
-  dappKeyPair,
-  token: localStorage.getItem('token') || '', // или другой способ получить JWT
+  session: session!, 
+  sharedSecret: sharedSecret!,
+  dappKeyPair: dappKeyPair!,  // Утверждаем, что dappKeyPair не null
+  token: localStorage.getItem('token') || '',
 });
+
 
 
       toast.info('Ожидание подтверждения транзакции...');
@@ -282,9 +283,9 @@ const result = await authStore.register(
 
 const signature = await processPayment({
   phantomWalletPublicKey,
-  session: session!,  // Гарантируем, что session не undefined
-  sharedSecret,
-  dappKeyPair,
+  session: session!, // гарантируем, что session не undefined
+  sharedSecret: sharedSecret!, // гарантируем, что не undefined
+  dappKeyPair: dappKeyPair!, // утверждаем, что не null
   token: localStorage.getItem('token') || '',
 });
 
