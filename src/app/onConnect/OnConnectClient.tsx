@@ -70,6 +70,7 @@ export default function OnConnectClient() {
           sharedSecretDapp
         );
 
+        localStorage.setItem('phantom_shared_secret', bs58.encode(sharedSecretDapp));
         localStorage.setItem('phantom_session', connectData.session);
         localStorage.setItem('phantom_public_key', connectData.public_key);
 
@@ -84,9 +85,7 @@ export default function OnConnectClient() {
           secretKey: dappSecret,
         });
 
-        // Готовы к запуску оплаты
         setReadyForPayment(true);
-
       } catch (e) {
         toast.error('Ошибка при обработке ответа от Phantom');
         setTimeout(() => router.replace('/'), 1500);
@@ -94,42 +93,42 @@ export default function OnConnectClient() {
     }
   }, [router, searchParams]);
 
-const handleStartPayment = async () => {
-  if (!phantomWalletPublicKey || !session || !sharedSecret || !dappKeyPair) {
-    toast.error('Отсутствуют данные для оплаты');
-    return;
-  }
-  setPaymentInProgress(true);
-  try {
-    const paymentResult = await processPayment({
-      phantomWalletPublicKey,
-      session,
-      sharedSecret,
-      dappKeyPair,
-    }, SOL_AMOUNT);
-
-    if (!paymentResult) {
-      toast.error('Оплата не была завершена');
-      setPaymentInProgress(false);
+  const handleStartPayment = async () => {
+    if (!phantomWalletPublicKey || !session || !sharedSecret || !dappKeyPair) {
+      toast.error('Отсутствуют данные для оплаты');
       return;
     }
+    setPaymentInProgress(true);
+    try {
+      const paymentResult = await processPayment({
+        phantomWalletPublicKey,
+        session,
+        sharedSecret,
+        dappKeyPair,
+      }, SOL_AMOUNT);
 
-    if (paymentResult === 'TRANSACTION_SENT_FOR_SIGNING') {
-      // Платеж отправлен на подпись через Phantom (обычно на мобилке)
-      // Перенаправление на другую страницу будет после редиректа Phantom, 
-      // поэтому здесь переход делать не нужно
-      toast.info('Пожалуйста, подтвердите транзакцию в Phantom Wallet');
-    } else {
-      // Txid получен — оплата прошла на десктопе через расширение
-      toast.success(`Платеж успешно отправлен, TxID: ${paymentResult}`);
-      router.replace('/chat');
+      if (!paymentResult) {
+        toast.error('Оплата не была завершена');
+        setPaymentInProgress(false);
+        return;
+      }
+
+      if (paymentResult === 'TRANSACTION_SENT_FOR_SIGNING') {
+        // Транзакция отправлена Phantom Wallet на подтверждение
+        toast.info('Пожалуйста, подтвердите транзакцию в Phantom Wallet');
+        // Ожидайте редиректа Phantom на redirect_link для завершения
+      } else {
+        // Txid получен — оплата успешно завершена на десктопе
+        toast.success(`Платеж успешно отправлен, TxID: ${paymentResult}`);
+        router.replace('/chat');
+      }
+    } catch (error) {
+      toast.error('Ошибка при оплате');
+    } finally {
+      setPaymentInProgress(false);
     }
-  } catch (error) {
-    toast.error('Ошибка при оплате');
-  } finally {
-    setPaymentInProgress(false);
-  }
-};
+  };
+
   return (
     <div style={{ padding: 40, textAlign: "center" }}>
       <h1>Phantom подключение!</h1>
