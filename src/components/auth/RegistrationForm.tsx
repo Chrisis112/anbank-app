@@ -20,7 +20,7 @@ export default function RegistrationForm() {
   const router = useRouter();
   const { setUser } = useUserStore();
   const { processPayment } = usePhantomPayment();
-  
+
   const {
     phantomWalletPublicKey,
     isConnected,
@@ -48,11 +48,8 @@ export default function RegistrationForm() {
   useEffect(() => {
     const initializeDeeplinks = async () => {
       const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) {
-        setDeepLink(initialUrl);
-      }
+      if (initialUrl) setDeepLink(initialUrl);
     };
-
     initializeDeeplinks();
 
     const subscription = Linking.addEventListener('url', ({ url }) => {
@@ -80,16 +77,13 @@ export default function RegistrationForm() {
         );
 
         console.log('Transaction completed:', signAndSendTransactionData);
-        
+
         if (signAndSendTransactionData.signature) {
           toast.success(`Платеж успешно обработан!`);
-          
+
           // Завершаем регистрацию после успешного платежа
           if (pendingRegistrationData) {
-            completeRegistration(
-              pendingRegistrationData,
-              signAndSendTransactionData.signature
-            );
+            completeRegistration(pendingRegistrationData, signAndSendTransactionData.signature);
           }
         }
       } catch (error) {
@@ -103,17 +97,18 @@ export default function RegistrationForm() {
   const completeRegistration = async (data: any, signature: string) => {
     try {
       const authStore = useAuthStore.getState();
-const solanaPublicKey = phantomWalletPublicKey?.toBase58() ?? null;
+      const solanaPublicKey = phantomWalletPublicKey?.toBase58() ?? null;
 
-const result = await authStore.register(
-  data.nickname,
-  data.email,
-  data.password,
-  data.role,
-  solanaPublicKey,  // здесь теперь string | null
-  signature,
-  data.promoCode
-);
+      const result = await authStore.register(
+        data.nickname,
+        data.email,
+        data.password,
+        data.role,
+        solanaPublicKey,
+        signature,
+        data.promoCode
+      );
+
       setRegisterLoading(false);
       setPendingRegistrationData(null);
 
@@ -151,7 +146,7 @@ const result = await authStore.register(
     promoCode: string | null;
   }) => {
     setRegisterLoading(true);
-    
+
     if (data.password !== data.confirmPassword) {
       toast.error('Пароли не совпадают');
       setRegisterLoading(false);
@@ -159,13 +154,13 @@ const result = await authStore.register(
     }
 
     const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
-    
+
     if (emailExists) {
       toast.error('Email уже используется');
       setRegisterLoading(false);
       return;
     }
-    
+
     if (nicknameExists) {
       toast.error('Никнейм уже используется');
       setRegisterLoading(false);
@@ -184,9 +179,8 @@ const result = await authStore.register(
           solanaPublicKey: null,
           paymentSignature: null,
         });
-        
         setRegisterLoading(false);
-        
+
         if (result.success) {
           localStorage.setItem('token', result.token || '');
           setUser(result.user);
@@ -216,18 +210,15 @@ const result = await authStore.register(
       setPendingRegistrationData(data);
 
       // Инициируем платеж
-await processPayment({
-  phantomWalletPublicKey,
-  session: session!, 
-  sharedSecret: sharedSecret!,
-  dappKeyPair: dappKeyPair!,  // Утверждаем, что dappKeyPair не null
-  token: localStorage.getItem('token') || '',
-});
-
-
+      await processPayment({
+        phantomWalletPublicKey,
+        session: session!,
+        sharedSecret: sharedSecret!,
+        dappKeyPair: dappKeyPair!, // Утверждаем, что dappKeyPair не null
+        token: localStorage.getItem('token') || '',
+      });
 
       toast.info('Ожидание подтверждения транзакции...');
-      
     } catch (error: any) {
       setRegisterLoading(false);
       setPendingRegistrationData(null);
@@ -243,7 +234,7 @@ await processPayment({
     try {
       const data = await loginUser(email, password);
       localStorage.setItem('token', data.token);
-      
+
       if (data.user) {
         setUser({
           id: data.user._id || data.user.id,
@@ -254,11 +245,10 @@ await processPayment({
           subscriptionExpiresAt: data.user.subscriptionExpiresAt || undefined,
         });
       }
-      
+
       toast.success('Вход выполнен успешно!');
       setIsLoginModalOpen(false);
       router.push('/chat');
-      
     } catch (err: any) {
       if (err.response?.data?.reason === 'subscription_inactive') {
         setIsLoginModalOpen(false);
@@ -278,16 +268,16 @@ await processPayment({
         return;
       }
       if (!phantomWalletPublicKey || !session || !sharedSecret) {
-  throw new Error('Phantom Wallet не подключен или отсутствует sharedSecret');
-}
+        throw new Error('Phantom Wallet не подключен или отсутствует sharedSecret');
+      }
 
-const signature = await processPayment({
-  phantomWalletPublicKey,
-  session: session!, // гарантируем, что session не undefined
-  sharedSecret: sharedSecret!, // гарантируем, что не undefined
-  dappKeyPair: dappKeyPair!, // утверждаем, что не null
-  token: localStorage.getItem('token') || '',
-});
+      const signature = await processPayment({
+        phantomWalletPublicKey,
+        session: session!, // гарантируем, что session не undefined
+        sharedSecret: sharedSecret!, // гарантируем, что не undefined
+        dappKeyPair: dappKeyPair!, // утверждаем, что не null
+        token: localStorage.getItem('token') || '',
+      });
 
       if (!signature) {
         toast.error('Ошибка платежа');
@@ -296,17 +286,18 @@ const signature = await processPayment({
 
       const solanaPublicKey = phantomWalletPublicKey.toBase58();
       const data = await renewSubscription(signature, solanaPublicKey, loginEmail);
-      
+
       toast.success('Подписка успешно продлена!');
       localStorage.setItem('token', data.token);
       setUser(data.user);
       setIsSubscriptionModalOpen(false);
       router.push('/chat');
-      
     } catch (error: any) {
       toast.error(error.message || 'Ошибка продления подписки');
     }
   };
+
+  const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
 
   return (
     <>
@@ -315,7 +306,7 @@ const signature = await processPayment({
           <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
             CryptoChat
           </h1>
-          
+
           {/* Статус подключения Phantom */}
           <div className="mb-4 text-center">
             <p className="text-sm text-gray-400">
@@ -327,30 +318,46 @@ const signature = await processPayment({
               </p>
             )}
             {!isConnected && (
-              <button
-                onClick={connectWallet}
-                disabled={isConnecting}
-                className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                {isConnecting ? 'Подключение...' : 'Подключить Phantom'}
-              </button>
+              <>
+                {!isPhantomInstalled && (
+                  <p className="text-red-500 mb-2">
+                    Пожалуйста, установите Phantom Wallet:{' '}
+                    <a
+                      href="https://phantom.app/download"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline"
+                    >
+                      https://phantom.app/download
+                    </a>
+                  </p>
+                )}
+                <button
+                  onClick={connectWallet}
+                  disabled={isConnecting || !isPhantomInstalled}
+                  className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {isConnecting ? 'Подключение...' : 'Подключить Phantom'}
+                </button>
+              </>
             )}
           </div>
 
           {/* Tab Switcher */}
           <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
             <button
+              type="button"
               className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
                 activeTab === 'register'
                   ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#6481f5_100%)] text-white'
                   : 'bg-transparent text-gray-300'
               }`}
               onClick={() => setActiveTab('register')}
-              type="button"
             >
               Регистрация
             </button>
             <button
+              type="button"
               className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
                 activeTab === 'login'
                   ? 'bg-[linear-gradient(90deg,#191b1f_0%,#232531_100%)] text-white'
@@ -360,7 +367,6 @@ const signature = await processPayment({
                 setActiveTab('login');
                 setIsLoginModalOpen(true);
               }}
-              type="button"
             >
               Вход
             </button>

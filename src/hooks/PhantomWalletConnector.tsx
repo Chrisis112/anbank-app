@@ -118,26 +118,37 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     }
   }, [deepLink, dappKeyPair]);
 
-  const connectWallet = useCallback(async () => {
-    if (!dappKeyPair) {
-      console.error('DappKeyPair is not initialized yet');
-      return;
-    }
-    try {
-      setIsConnecting(true);
-      const params = new URLSearchParams({
-        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-        cluster: 'mainnet-beta',
-        app_url: 'https://app.anbanktoken.com',
-        redirect_link: onConnectRedirectLink,
-      });
+const connectWallet = useCallback(async () => {
+  try {
+    setIsConnecting(true);
+
+    // Проверяем, установлен ли Phantom (desktop)
+    if (typeof window !== 'undefined' && window.solana?.isPhantom) {
+      const resp = await window.solana.connect();
+      setPhantomWalletPublicKey(new PublicKey(resp.publicKey.toString()));
+      // Здесь нужно реализовать генерацию/получение dappKeyPair и сессии,
+      // либо перейти на deeplink flow при необходимости
+      setIsConnecting(false);
+    } else {
+      // Если Phantom не установлен, открываем deeplink или показываем ошибку
+     if (!dappKeyPair) {
+  throw new Error('dappKeyPair не инициализирован');
+}
+
+const params = new URLSearchParams({
+  dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+  cluster: 'mainnet-beta',
+  app_url: 'https://app.anbanktoken.com',
+  redirect_link: onConnectRedirectLink,
+});
       const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
       await Linking.openURL(connectUrl);
-    } catch (error) {
-      console.error('Error connecting to Phantom:', error);
-      setIsConnecting(false);
     }
-  }, [dappKeyPair, onConnectRedirectLink]);
+  } catch (error) {
+    console.error('Error connecting to Phantom:', error);
+    setIsConnecting(false);
+  }
+}, [dappKeyPair?.publicKey, onConnectRedirectLink]);
 
   const disconnectWallet = useCallback(() => {
     setPhantomWalletPublicKey(null);
