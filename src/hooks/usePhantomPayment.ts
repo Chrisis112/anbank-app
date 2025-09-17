@@ -13,7 +13,7 @@ function buildUrl(action: string, params: URLSearchParams): string {
 const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.36');
 
-const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl("mainnet-beta");
+const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl('mainnet-beta');
 const connection = new Connection(rpcUrl);
 
 const onSignAndSendTransactionRedirectLink = typeof window !== 'undefined'
@@ -103,6 +103,13 @@ export const usePhantomPayment = () => {
           redirect_link: onSignAndSendTransactionRedirectLink,
           payload: bs58.encode(encryptedPayload),
         });
+console.log('Deeplink parameters:');
+console.log('dapp_encryption_public_key:', bs58.encode(dappKeyPair.publicKey));
+console.log('nonce:', bs58.encode(nonce));
+console.log('redirect_link:', onSignAndSendTransactionRedirectLink);
+console.log('payload length:', encryptedPayload.length);
+console.log('payload (base58 encoded):', bs58.encode(encryptedPayload));
+
 
         const url = buildUrl("signAndSendTransaction", urlParams);
         window.open(url, "_blank");
