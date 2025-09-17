@@ -4,7 +4,11 @@ import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { toast } from 'react-toastify';
 import { encryptPayload } from '@/utils/encryptPayload';
-import { buildUrl } from '@/utils/buildUrl';
+function buildUrl(action: string, params: URLSearchParams): string {
+  const base = 'https://phantom.app/ul/v1';
+  return `${base}/${action}?${params.toString()}`;
+}
+
 
 
 const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';

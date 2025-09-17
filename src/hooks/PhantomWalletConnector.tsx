@@ -6,7 +6,7 @@ import bs58 from 'bs58';
 import { PublicKey } from '@solana/web3.js';
 import { decryptPayload } from '@/utils/decryptPayload';
 import { encryptPayload } from '@/utils/encryptPayload';
-import { buildUrl } from '@/utils/buildUrl';
+import buildUrl from '@/utils/buildUrl';
 
 const onConnectRedirectLink = typeof window !== 'undefined'
   ? `${window.location.origin}/onConnect`

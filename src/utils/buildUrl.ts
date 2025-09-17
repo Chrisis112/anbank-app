@@ -1,4 +1,4 @@
-const BASE_URL = "https://phantom.app/ul/v1/";
-
-export const buildUrl = (path: string, params: URLSearchParams) =>
-  `${BASE_URL}${path}?${params.toString()}`;
+export default function buildUrl(action: string, params: URLSearchParams): string {
+  const base = 'https://phantom.app/ul/v1';
+  return `${base}/${action}?${params.toString()}`;
+}
