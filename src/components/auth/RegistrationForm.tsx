@@ -356,7 +356,7 @@ export default function RegistrationForm() {
             {phantomWalletPublicKey && (
               <p className="text-xs text-gray-500 break-all">{phantomWalletPublicKey.toBase58().slice(0, 20)}...</p>
             )}
-            {!isConnected && (
+            {!phantomWalletPublicKey && (
               <>
                 {!isPhantomInstalled && (
                   <p className="text-red-500 mb-2">
