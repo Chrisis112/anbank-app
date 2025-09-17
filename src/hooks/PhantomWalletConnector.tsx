@@ -24,7 +24,24 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const [session, setSession] = useState<string>();
   const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
   const [deepLink, setDeepLink] = useState<string>('');
-  const [dappKeyPair] = useState(() => nacl.box.keyPair());
+  // Инициализация dappKeyPair из localStorage или генерация нового
+  const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair>(() => {
+    try {
+      const saved = localStorage.getItem('dappKeyPair_secretKey');
+      if (saved) {
+        const secretKey = bs58.decode(saved);
+        return {
+          publicKey: secretKey.slice(32),
+          secretKey,
+        };
+      }
+    } catch {
+      // Игнорируем ошибки
+    }
+    const newKeyPair = nacl.box.keyPair();
+    localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newKeyPair.secretKey));
+    return newKeyPair;
+  });
 
   // Создание redirect ссылок
   const onConnectRedirectLink = Linking.createURL('onConnect');
@@ -38,18 +55,13 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   // Инициализация deeplink слушателя
   useEffect(() => {
     const initializeDeeplinks = async () => {
-      // Проверяем начальный URL (если приложение открыто через deeplink)
       const initialUrl = await Linking.getInitialURL();
       if (initialUrl) {
         setDeepLink(initialUrl);
       }
     };
-
     initializeDeeplinks();
-
-    // Подписываемся на события URL
     const subscription = Linking.addEventListener('url', handleDeepLink);
-
     return () => {
       subscription?.remove();
     };
@@ -78,18 +90,15 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
           bs58.decode(params.get('phantom_encryption_public_key')!),
           dappKeyPair.secretKey
         );
-
         const connectData = decryptPayload(
           params.get('data')!,
           params.get('nonce')!,
           sharedSecretDapp
         );
-
         setSharedSecret(sharedSecretDapp);
         setSession(connectData.session);
         setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
         setIsConnecting(false);
-
         console.log(`Connected to Phantom: ${connectData.public_key}`);
         return;
       }
@@ -112,16 +121,13 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const connectWallet = useCallback(async () => {
     try {
       setIsConnecting(true);
-
       const params = new URLSearchParams({
         dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
         cluster: 'mainnet-beta',
         app_url: 'https://app.anbanktoken.com',
         redirect_link: onConnectRedirectLink,
       });
-
       const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
-      
       await Linking.openURL(connectUrl);
     } catch (error) {
       console.error('Error connecting to Phantom:', error);
