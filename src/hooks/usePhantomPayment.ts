@@ -84,7 +84,7 @@ export const usePhantomPayment = () => {
       transaction.feePayer = phantomWalletPublicKey;
 
       if (isMobileDevice()) {
-        // Мобильное устройство — используем deeplink
+        // Мобильное устройство — deeplink оплату
         const serializedTransaction = transaction.serialize({
           requireAllSignatures: false,
           verifySignatures: false,
@@ -103,18 +103,21 @@ export const usePhantomPayment = () => {
           redirect_link: onSignAndSendTransactionRedirectLink,
           payload: bs58.encode(encryptedPayload),
         });
+
         console.log('Deeplink URL parameters:');
-console.log('dapp_encryption_public_key:', bs58.encode(dappKeyPair.publicKey));
-console.log('nonce:', bs58.encode(nonce));
-console.log('redirect_link:', onSignAndSendTransactionRedirectLink);
-console.log('payload (base58):', bs58.encode(encryptedPayload));
+        console.log('dapp_encryption_public_key:', bs58.encode(dappKeyPair.publicKey));
+        console.log('nonce:', bs58.encode(nonce));
+        console.log('redirect_link:', onSignAndSendTransactionRedirectLink);
+        console.log('payload (base58):', bs58.encode(encryptedPayload));
 
         const url = buildUrl("signAndSendTransaction", urlParams);
+        console.log('Phantom deeplink URL:', url);
+
         window.open(url, "_blank");
         toast.info('Подтвердите транзакцию в Phantom Wallet');
         return 'TRANSACTION_SENT_FOR_SIGNING';
       } else {
-        // Десктоп — используем расширение Phantom Wallet
+        // Десктоп — расширение Phantom
         //@ts-ignore
         const provider = window.solana;
         if (!provider?.isPhantom) {
