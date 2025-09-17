@@ -21,19 +21,15 @@ interface Props {
 export const WalletContextProvider: FC<Props> = ({ children }) => {
 const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
 
+const isDevnet = rpcUrl.includes('devnet');
 
-  const mobileWalletAdapter = useMemo(() => new SolanaMobileWalletAdapter({
-    appIdentity: {
-      name: 'CryptoChat',
-      uri: typeof window !== 'undefined' ? window.location.origin : undefined,
-    },
-    authorizationResultCache: new SimpleAuthorizationResultCache(),
-    addressSelector: createDefaultAddressSelector(),
-    cluster: 'mainnet-beta', // или 'devnet'
-    onWalletNotFound: async (_adapter: LocalSolanaMobileWalletAdapter) => {
-      alert('Solana Mobile Wallet не найден! Пожалуйста, установите его.');
-    }
-  }), []);
+const mobileWalletAdapter = useMemo(() => new SolanaMobileWalletAdapter({
+  appIdentity: { name: 'CryptoChat', uri: typeof window !== 'undefined' ? window.location.origin : undefined },
+  authorizationResultCache: new SimpleAuthorizationResultCache(),
+  addressSelector: createDefaultAddressSelector(),
+  cluster: isDevnet ? 'devnet' : 'mainnet-beta',
+  onWalletNotFound: async (_adapter) => { alert('Solana Mobile Wallet не найден!'); }
+}), [rpcUrl]);
 
   const wallets = useMemo(() => [
     new PhantomWalletAdapter(),
