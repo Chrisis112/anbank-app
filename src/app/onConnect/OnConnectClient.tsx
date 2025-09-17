@@ -94,35 +94,42 @@ export default function OnConnectClient() {
     }
   }, [router, searchParams]);
 
-  const handleStartPayment = async () => {
-    if (!phantomWalletPublicKey || !session || !sharedSecret || !dappKeyPair) {
-      toast.error('Отсутствуют данные для оплаты');
+const handleStartPayment = async () => {
+  if (!phantomWalletPublicKey || !session || !sharedSecret || !dappKeyPair) {
+    toast.error('Отсутствуют данные для оплаты');
+    return;
+  }
+  setPaymentInProgress(true);
+  try {
+    const paymentResult = await processPayment({
+      phantomWalletPublicKey,
+      session,
+      sharedSecret,
+      dappKeyPair,
+    }, SOL_AMOUNT);
+
+    if (!paymentResult) {
+      toast.error('Оплата не была завершена');
+      setPaymentInProgress(false);
       return;
     }
-    setPaymentInProgress(true);
-    try {
-      const paymentResult = await processPayment({
-        phantomWalletPublicKey,
-        session,
-        sharedSecret,
-        dappKeyPair,
-      }, SOL_AMOUNT);
 
-      if (!paymentResult) {
-        toast.error('Оплата не была завершена');
-        setPaymentInProgress(false);
-        return;
-      }
-
-      // Переадресация после успешной оплаты
+    if (paymentResult === 'TRANSACTION_SENT_FOR_SIGNING') {
+      // Платеж отправлен на подпись через Phantom (обычно на мобилке)
+      // Перенаправление на другую страницу будет после редиректа Phantom, 
+      // поэтому здесь переход делать не нужно
+      toast.info('Пожалуйста, подтвердите транзакцию в Phantom Wallet');
+    } else {
+      // Txid получен — оплата прошла на десктопе через расширение
+      toast.success(`Платеж успешно отправлен, TxID: ${paymentResult}`);
       router.replace('/chat');
-    } catch (error) {
-      toast.error('Ошибка при оплате');
-    } finally {
-      setPaymentInProgress(false);
     }
-  };
-
+  } catch (error) {
+    toast.error('Ошибка при оплате');
+  } finally {
+    setPaymentInProgress(false);
+  }
+};
   return (
     <div style={{ padding: 40, textAlign: "center" }}>
       <h1>Phantom подключение!</h1>
