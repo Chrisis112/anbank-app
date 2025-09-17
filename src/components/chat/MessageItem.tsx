@@ -1,7 +1,7 @@
 'use client';
 
 import classNames from 'classnames';
-import { useState } from 'react';
+import { JSX, useState } from 'react';
 import { Message } from '../../store/chatStore';
 import { UserPreview } from './types';
 import { ReactionPopover } from './ReactionPopover';

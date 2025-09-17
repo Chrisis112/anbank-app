@@ -1,9 +1,7 @@
-const { withExpo } = require('@expo/next-adapter');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
+  // swcMinify: true,  // Уберите или закомментируйте
   transpilePackages: [
     'react-native',
     'react-native-web',
@@ -11,7 +9,9 @@ const nextConfig = {
     'expo-linking',
     'expo-constants',
     '@expo/next-adapter',
-    'react-native-svg'
+      'expo-modules-core', // добавьте этот пакет
+  'expo-modules-autolinking', // возможно нужно
+    'react-native-svg',
   ],
   webpack: (config, { isServer }) => {
     if (!isServer) {
@@ -39,18 +39,13 @@ const nextConfig = {
       {
         source: '/:path*',
         headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
         ],
       },
     ];
   },
 };
 
+const { withExpo } = require('@expo/next-adapter');
 module.exports = withExpo(nextConfig);
