@@ -71,6 +71,30 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     return () => subscription?.remove();
   }, [handleDeepLink]);
 
+useEffect(() => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const saved = localStorage.getItem('dappKeyPair_secretKey');
+    if (saved) {
+      const secretKey = bs58.decode(saved);
+      setDappKeyPair({
+        secretKey,
+        publicKey: secretKey.slice(32),
+      });
+    } else {
+      const newKeyPair = nacl.box.keyPair();
+      localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newKeyPair.secretKey));
+      setDappKeyPair(newKeyPair);
+    }
+  } catch {
+    const newKeyPair = nacl.box.keyPair();
+    localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newKeyPair.secretKey));
+    setDappKeyPair(newKeyPair);
+  }
+}, []);
+
+
   useEffect(() => {
     if (!deepLink || !dappKeyPair) return; // ждем dappKeyPair
 
@@ -122,39 +146,34 @@ const connectWallet = useCallback(async () => {
   try {
     setIsConnecting(true);
 
-    // Проверяем, установлен ли Phantom (desktop)
     if (typeof window !== 'undefined' && window.solana?.isPhantom) {
-      // Подключаемся к Phantom расширению
       const resp = await window.solana.connect();
       setPhantomWalletPublicKey(new PublicKey(resp.publicKey.toString()));
 
-      // TODO: реализуем генерацию/загрузку dappKeyPair и session для desktop
-      // Генерируем новый ключевой пэйр (или загружаем из localStorage)
-      let newDappKeyPair: nacl.BoxKeyPair;
-      const savedKey = localStorage.getItem('dappKeyPair_secretKey');
-      if (savedKey) {
-        const secretKey = bs58.decode(savedKey);
-        newDappKeyPair = {
-          publicKey: secretKey.slice(32),
-          secretKey,
-        };
-      } else {
-        newDappKeyPair = nacl.box.keyPair();
-        localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newDappKeyPair.secretKey));
+      if (!dappKeyPair) {
+        // Повторно загрузить или сгенерировать ключ, если не был инициализирован до этого
+        const savedKey = localStorage.getItem('dappKeyPair_secretKey');
+        let newDappKeyPair: nacl.BoxKeyPair;
+        if (savedKey) {
+          const secretKey = bs58.decode(savedKey);
+          newDappKeyPair = {
+            publicKey: secretKey.slice(32),
+            secretKey,
+          };
+        } else {
+          newDappKeyPair = nacl.box.keyPair();
+          localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newDappKeyPair.secretKey));
+        }
+        setDappKeyPair(newDappKeyPair);
       }
-      setDappKeyPair(newDappKeyPair);
 
-      // Для desktop нельзя получить `phantom_encryption_public_key` при connect,
-      // поэтому sharedSecret можно временно не устанавливать или реализовать отдельный flow.
-      // session можно сгенерировать самодельный уникальный идентификатор или null
-      const generatedSession = crypto.randomUUID?.() || null;
-      setSession(generatedSession || undefined);
-      setSharedSecret(undefined); // Установите как undefined, т.к. sharedSecret для desktop специфичен
+      // Для desktop session и sharedSecret можно устанавливать, если есть логика
 
       setIsConnecting(false);
     } else {
-      // Если Phantom не установлен (мобильный сценарий)
-      if (!dappKeyPair) throw new Error('dappKeyPair не инициализирован');
+      if (!dappKeyPair) {
+        throw new Error('dappKeyPair не инициализирован');
+      }
 
       const params = new URLSearchParams({
         dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
@@ -162,7 +181,6 @@ const connectWallet = useCallback(async () => {
         app_url: 'https://app.anbanktoken.com',
         redirect_link: onConnectRedirectLink,
       });
-
       const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
       await Linking.openURL(connectUrl);
     }

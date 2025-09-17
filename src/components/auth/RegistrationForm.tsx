@@ -134,109 +134,116 @@ export default function RegistrationForm() {
     setPromoCodeError(message);
   };
 
-  const handleRegisterSubmit = async (data: {
-    nickname: string;
-    email: string;
-    password: string;
-    confirmPassword: string;
-    role: Role;
-    promoCode: string | null;
-  }) => {
-    setRegisterLoading(true);
+const handleRegisterSubmit = async (data: {
+  nickname: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  role: Role;
+  promoCode: string | null;
+}) => {
+  setRegisterLoading(true);
 
-    if (data.password !== data.confirmPassword) {
-      toast.error('Пароли не совпадают');
-      setRegisterLoading(false);
-      return;
-    }
+  if (data.password !== data.confirmPassword) {
+    toast.error('Пароли не совпадают');
+    setRegisterLoading(false);
+    return;
+  }
 
-    const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
+  const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
 
-    if (emailExists) {
-      toast.error('Email уже используется');
-      setRegisterLoading(false);
-      return;
-    }
+  if (emailExists) {
+    toast.error('Email уже используется');
+    setRegisterLoading(false);
+    return;
+  }
 
-    if (nicknameExists) {
-      toast.error('Никнейм уже используется');
-      setRegisterLoading(false);
-      return;
-    }
+  if (nicknameExists) {
+    toast.error('Никнейм уже используется');
+    setRegisterLoading(false);
+    return;
+  }
 
-    try {
-      // Регистрация с промокодом без оплаты
-      if (data.promoCode) {
-        const result = await registerUser({
-          nickname: data.nickname,
-          email: data.email,
-          password: data.password,
-          role: data.role,
-          promoCode: data.promoCode,
-          solanaPublicKey: null,
-          paymentSignature: null,
-        });
-        setRegisterLoading(false);
+  // Проверяем наличие Phantom (desktop) и мобильное приложение
+  const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
 
-        if (result.success) {
-          localStorage.setItem('token', result.token || '');
-          setUser(result.user);
-          toast.success('Регистрация успешна!');
-          router.push('/chat');
-        } else {
-          toast.error(result.error || 'Ошибка регистрации');
-        }
-        return;
-      }
-
-      // Проверка наличия Phantom кошелька в браузере (desktop)
-      const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
-
-      if (!isConnected) {
-        if (!isPhantomInstalled) {
-          toast.info(
-            <>
-              Чтобы подключить Phantom Wallet, установите расширение для браузера или приложение mobile Phantom:
-              <br />
-              <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
-                https://phantom.app/download
-              </a>
-            </>
-          );
-          setRegisterLoading(false);
-          return;
-        }
-        toast.info('Сначала подключите Phantom Wallet');
-        await connectWallet();
-        setRegisterLoading(false);
-        return;
-      }
-
-      if (!phantomWalletPublicKey || !session || !sharedSecret) {
-        toast.error('Phantom Wallet не подключен');
-        setRegisterLoading(false);
-        return;
-      }
-
-      // Сохраняем данные регистрации для завершения после платежа
-      setPendingRegistrationData(data);
-
-      // Инициируем платеж
-      await processPayment({
-        phantomWalletPublicKey,
-        session: session!,
-        sharedSecret: sharedSecret!,
-        dappKeyPair: dappKeyPair!, // Утверждаем, что dappKeyPair не null
-        token: localStorage.getItem('token') || '',
+  try {
+    // Регистрация с промокодом без оплаты
+    if (data.promoCode) {
+      const result = await registerUser({
+        nickname: data.nickname,
+        email: data.email,
+        password: data.password,
+        role: data.role,
+        promoCode: data.promoCode,
+        solanaPublicKey: null,
+        paymentSignature: null,
       });
-
-      toast.info('Ожидание подтверждения транзакции...');
-    } catch (error: any) {
       setRegisterLoading(false);
-      setPendingRegistrationData(null);
-      toast.error(error?.message || 'Ошибка регистрации');
+
+      if (result.success) {
+        localStorage.setItem('token', result.token || '');
+        setUser(result.user);
+        toast.success('Регистрация успешна!');
+        router.push('/chat');
+      } else {
+        toast.error(result.error || 'Ошибка регистрации');
+      }
+      return;
     }
-  };
+
+    if (!isConnected) {
+      if (!isPhantomInstalled) {
+        toast.info(
+          <>
+            Чтобы подключить Phantom Wallet, установите расширение для браузера или приложение mobile Phantom:
+            <br />
+            <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
+              https://phantom.app/download
+            </a>
+          </>
+        );
+        setRegisterLoading(false);
+        return;
+      }
+      toast.info('Сначала подключите Phantom Wallet');
+      await connectWallet();
+
+      // Ждем подтверждения подключения - например, тут можно добавить небольшой таймаут,
+      // либо слушать изменения состояния isConnected через useEffect
+  
+      setRegisterLoading(false);
+      return;
+    }
+    
+    
+
+    // После подключения убеждаемся, что необходимые данные получены
+    if (!phantomWalletPublicKey || !session || !sharedSecret) {
+      toast.error('Phantom Wallet не подключен. Пожалуйста, снова нажмите "Подключить Phantom"');
+      setRegisterLoading(false);
+      return;
+    }
+
+    // Сохраняем данные регистрации для завершения после платежа
+    setPendingRegistrationData(data);
+
+    // Инициируем платеж
+    await processPayment({
+      phantomWalletPublicKey,
+      session: session!,
+      sharedSecret: sharedSecret!,
+      dappKeyPair: dappKeyPair!, // Утверждаем, что dappKeyPair не null
+      token: localStorage.getItem('token') || '',
+    });
+
+    toast.info('Ожидание подтверждения транзакции...');
+  } catch (error: any) {
+    setRegisterLoading(false);
+    setPendingRegistrationData(null);
+    toast.error(error?.message || 'Ошибка регистрации');
+  }
+};
 
   const handleLoginSubmit = async (email: string, password: string) => {
     setLoginLoading(true);
