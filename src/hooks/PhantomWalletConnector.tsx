@@ -13,7 +13,9 @@ interface PhantomWalletConnectorReturn {
   isConnecting: boolean;
   setPhantomWalletPublicKey: (key: PublicKey | null) => void;
   session: string | undefined;
+  setSession: (session: string | undefined) => void;
   sharedSecret: Uint8Array | undefined;
+  setSharedSecret: (secret: Uint8Array | undefined) => void;
   dappKeyPair: nacl.BoxKeyPair | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
@@ -22,8 +24,8 @@ interface PhantomWalletConnectorReturn {
 export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const [phantomWalletPublicKey, setPhantomWalletPublicKey] = useState<PublicKey | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [session, setSession] = useState<string>();
-  const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
+  const [session, setSession] = useState<string | undefined>(undefined);
+  const [sharedSecret, setSharedSecret] = useState<Uint8Array | undefined>(undefined);
   const [deepLink, setDeepLink] = useState<string>('');
   const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair | null>(null);
 
@@ -48,6 +50,37 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
       const newKeyPair = nacl.box.keyPair();
       localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newKeyPair.secretKey));
       setDappKeyPair(newKeyPair);
+    }
+  }, []);
+
+  // Восстановление публичного ключа, сессии и sharedSecret из localStorage при монтировании
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const storedKey = localStorage.getItem('phantom_public_key');
+    const storedSession = localStorage.getItem('phantom_session');
+    const storedSharedSecret = localStorage.getItem('phantom_shared_secret');
+
+    if (storedKey) {
+      try {
+        setPhantomWalletPublicKey(new PublicKey(storedKey));
+      } catch {
+        localStorage.removeItem('phantom_public_key');
+        setPhantomWalletPublicKey(null);
+      }
+    }
+
+    if (storedSession) {
+      setSession(storedSession);
+    }
+
+    if (storedSharedSecret) {
+      try {
+        setSharedSecret(bs58.decode(storedSharedSecret));
+      } catch {
+        localStorage.removeItem('phantom_shared_secret');
+        setSharedSecret(undefined);
+      }
     }
   }, []);
 
@@ -101,6 +134,12 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
         setIsConnecting(false);
         console.log(`Connected to Phantom: ${connectData.public_key}`);
+
+        // Сохраняем в localStorage для перезагрузок
+        localStorage.setItem('phantom_public_key', connectData.public_key);
+        localStorage.setItem('phantom_session', connectData.session);
+        localStorage.setItem('phantom_shared_secret', bs58.encode(sharedSecretDapp));
+
         return;
       }
 
@@ -108,6 +147,11 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         setPhantomWalletPublicKey(null);
         setSession(undefined);
         setSharedSecret(undefined);
+
+        localStorage.removeItem('phantom_public_key');
+        localStorage.removeItem('phantom_session');
+        localStorage.removeItem('phantom_shared_secret');
+
         console.log('Disconnected from Phantom');
         return;
       }
@@ -116,21 +160,6 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
       setIsConnecting(false);
     }
   }, [deepLink, dappKeyPair]);
-
-  // Восстановление публичного ключа из localStorage при загрузке страницы
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const storedPhantomKey = localStorage.getItem('phantom_public_key');
-    if (storedPhantomKey) {
-      try {
-        setPhantomWalletPublicKey(new PublicKey(storedPhantomKey));
-      } catch {
-        localStorage.removeItem('phantom_public_key');
-        setPhantomWalletPublicKey(null);
-      }
-    }
-  }, []);
 
   const connectWallet = useCallback(async () => {
     try {
@@ -180,7 +209,11 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     setPhantomWalletPublicKey(null);
     setSession(undefined);
     setSharedSecret(undefined);
+
     localStorage.removeItem('phantom_public_key');
+    localStorage.removeItem('phantom_session');
+    localStorage.removeItem('phantom_shared_secret');
+
     setIsConnecting(false);
   }, []);
 
@@ -190,7 +223,9 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     isConnecting,
     setPhantomWalletPublicKey,
     session,
+    setSession,
     sharedSecret,
+    setSharedSecret,
     dappKeyPair,
     connectWallet,
     disconnectWallet,
