@@ -4,19 +4,17 @@ import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { toast } from 'react-toastify';
 import { encryptPayload } from '@/utils/encryptPayload';
+
 function buildUrl(action: string, params: URLSearchParams): string {
   const base = 'https://phantom.app/ul/v1';
   return `${base}/${action}?${params.toString()}`;
 }
-
-
 
 const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.36');
 
 const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl("mainnet-beta");
 const connection = new Connection(rpcUrl);
-
 
 const onSignAndSendTransactionRedirectLink = typeof window !== 'undefined'
   ? `${window.location.origin}/onSignAndSendTransaction`
@@ -27,6 +25,11 @@ interface PaymentParams {
   session: string | undefined;
   sharedSecret: Uint8Array | undefined;
   dappKeyPair: nacl.BoxKeyPair;
+}
+
+function isMobileDevice() {
+  if (typeof navigator === 'undefined') return false;
+  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent.toLowerCase());
 }
 
 export const usePhantomPayment = () => {
@@ -57,10 +60,10 @@ export const usePhantomPayment = () => {
       }
 
       const lamports = amount * LAMPORTS_PER_SOL;
-      
+
       // Проверка баланса
       const balance = await connection.getBalance(phantomWalletPublicKey);
-      if (balance < lamports + 5000) { // 5000 ламportов на комиссию
+      if (balance < lamports + 5000) {
         throw new Error('Недостаточно средств на балансе');
       }
 
@@ -80,35 +83,47 @@ export const usePhantomPayment = () => {
       transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
       transaction.feePayer = phantomWalletPublicKey;
 
-      // Сериализация транзакции
-      const serializedTransaction = transaction.serialize({
-        requireAllSignatures: false,
-        verifySignatures: false,
-      });
+      if (isMobileDevice()) {
+        // Мобильное устройство — используем deeplink
+        const serializedTransaction = transaction.serialize({
+          requireAllSignatures: false,
+          verifySignatures: false,
+        });
 
-      const payload = {
-        session,
-        transaction: bs58.encode(serializedTransaction),
-      };
+        const payload = {
+          session,
+          transaction: bs58.encode(serializedTransaction),
+        };
 
-      const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
+        const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
 
-      const params = new URLSearchParams({
-        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-        nonce: bs58.encode(nonce),
-        redirect_link: onSignAndSendTransactionRedirectLink,
-        payload: bs58.encode(encryptedPayload),
-      });
+        const urlParams = new URLSearchParams({
+          dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+          nonce: bs58.encode(nonce),
+          redirect_link: onSignAndSendTransactionRedirectLink,
+          payload: bs58.encode(encryptedPayload),
+        });
 
-      const url = buildUrl("signAndSendTransaction", params);
-      
-      window.open(url, "_blank");
-      
-      toast.info('Подтвердите транзакцию в Phantom Wallet');
-      
-      // Возвращаем специальное значение, указывающее что транзакция отправлена на подпись
-      return 'TRANSACTION_SENT_FOR_SIGNING';
-      
+        const url = buildUrl("signAndSendTransaction", urlParams);
+        window.open(url, "_blank");
+        toast.info('Подтвердите транзакцию в Phantom Wallet');
+        return 'TRANSACTION_SENT_FOR_SIGNING';
+      } else {
+        // Десктоп — используем расширение Phantom Wallet
+        //@ts-ignore
+        const provider = window.solana;
+        if (!provider?.isPhantom) {
+          throw new Error('Phantom расширение не найдено');
+        }
+
+        const signedTransaction = await provider.signTransaction(transaction);
+        const txid = await connection.sendRawTransaction(signedTransaction.serialize());
+        await connection.confirmTransaction(txid);
+
+        toast.success(`Платеж успешно отправлен, TxID: ${txid}`);
+
+        return txid;
+      }
     } catch (error: any) {
       console.error('Ошибка обработки платежа:', error);
       toast.error(`Ошибка платежа: ${error?.message || 'Неизвестная ошибка'}`);
