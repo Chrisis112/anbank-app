@@ -1,19 +1,23 @@
 import { useState, useCallback } from 'react';
 import { Transaction, PublicKey, SystemProgram, LAMPORTS_PER_SOL, Connection, clusterApiUrl } from '@solana/web3.js';
-
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { toast } from 'react-toastify';
 import { encryptPayload } from '@/utils/encryptPayload';
 import { buildUrl } from '@/utils/buildUrl';
 
+
 const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.36');
-const connection = new Connection(clusterApiUrl("mainnet-beta"));
+
+const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl("mainnet-beta");
+const connection = new Connection(rpcUrl);
+
 
 const onSignAndSendTransactionRedirectLink = typeof window !== 'undefined'
   ? `${window.location.origin}/onSignAndSendTransaction`
   : '/onSignAndSendTransaction';
+
 interface PaymentParams {
   phantomWalletPublicKey: PublicKey | null;
   session: string | undefined;
@@ -94,7 +98,7 @@ export const usePhantomPayment = () => {
 
       const url = buildUrl("signAndSendTransaction", params);
       
-window.open(url, "_blank");
+      window.open(url, "_blank");
       
       toast.info('Подтвердите транзакцию в Phantom Wallet');
       

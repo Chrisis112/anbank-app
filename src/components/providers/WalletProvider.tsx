@@ -19,7 +19,8 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || '';
+const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
+
 
   const mobileWalletAdapter = useMemo(() => new SolanaMobileWalletAdapter({
     appIdentity: {

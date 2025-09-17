@@ -33,70 +33,73 @@ function getDappKeyPair(): nacl.BoxKeyPair | null {
   }
 }
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+useEffect(() => {
+  if (typeof window === 'undefined') return;
 
-    const phantom_encryption_public_key = searchParams.get('phantom_encryption_public_key');
-    const nonce = searchParams.get('nonce');
-    const data = searchParams.get('data');
-    const errorCode = searchParams.get('errorCode');
-    const errorMessage = searchParams.get('errorMessage');
+  const phantom_encryption_public_key = searchParams.get('phantom_encryption_public_key');
+  const nonce = searchParams.get('nonce');
+  const data = searchParams.get('data');
+  const errorCode = searchParams.get('errorCode');
+  const errorMessage = searchParams.get('errorMessage');
 
-    if (errorCode) {
-      toast.error(`Phantom connection error: ${errorMessage || errorCode}`);
-      router.replace('/');
-      return;
-    }
+  if (errorCode) {
+    toast.error(`Phantom connection error: ${errorMessage || errorCode}`);
+    router.replace('/');
+    return;
+  }
 
-    if (phantom_encryption_public_key && nonce && data) {
-      (async () => {
-        try {
-          const encodedDappSecretKey = localStorage.getItem('dappKeyPair_secretKey');
-          if (!encodedDappSecretKey) throw new Error('Нет локального ключа приложения для дешифровки данных');
-          const dappSecretKey = bs58.decode(encodedDappSecretKey);
+  if (phantom_encryption_public_key && nonce && data) {
+    (async () => {
+      try {
+        const encodedDappSecretKey = localStorage.getItem('dappKeyPair_secretKey');
+        if (!encodedDappSecretKey) throw new Error('Нет локального ключа приложения для дешифровки данных');
+        const dappSecretKey = bs58.decode(encodedDappSecretKey);
 
-          const sharedSecret = nacl.box.before(
-            bs58.decode(phantom_encryption_public_key),
-            dappSecretKey
-          );
-          const connectData = decryptPayload(
-            data,
-            nonce,
-            sharedSecret
-          );
+        const sharedSecret = nacl.box.before(
+          bs58.decode(phantom_encryption_public_key),
+          dappSecretKey
+        );
 
-          localStorage.setItem('phantom_session', connectData.session);
-          localStorage.setItem('phantom_public_key', connectData.public_key);
+        const connectData = decryptPayload(
+          data,
+          nonce,
+          sharedSecret
+        );
 
-          toast.success('Phantom Wallet успешно подключен!');
+        localStorage.setItem('phantom_session', connectData.session);
+        localStorage.setItem('phantom_public_key', connectData.public_key);
 
-          // Запускаем оплату, используя processPayment с указанной суммой
-          const solanaPublicKey = connectData.public_key;
-          const session = connectData.session;
-          const dappKeyPair = getDappKeyPair();
-if (!dappKeyPair) {
-  toast.error('Ключи приложения не найдены');
-  return;
-}
-          // processPayment должен принимать данные пользователя (ключ, сессию и сумму)
-          await processPayment({
-            phantomWalletPublicKey: new PublicKey(solanaPublicKey),
-            session,
-            sharedSecret,
-            dappKeyPair, // если нужно передать
-          }, SOL_AMOUNT);
+        toast.success('Phantom Wallet успешно подключен!');
 
-          // После оплаты перенаправляем на чат или другую страницу
-          router.replace('/chat');
-
-        } catch (e) {
-          console.error(e);
-          toast.error('Ошибка при обработке ответа от Phantom');
-          setTimeout(() => router.replace('/'), 1500);
+        const dappKeyPair = getDappKeyPair();
+        if (!dappKeyPair) {
+          toast.error('Ключи приложения не найдены');
+          return;
         }
-      })();
-    }
-  }, [router, searchParams, processPayment]);
+
+        const paymentResult = await processPayment({
+          phantomWalletPublicKey: new PublicKey(connectData.public_key),
+          session: connectData.session,
+          sharedSecret,
+          dappKeyPair,
+        }, SOL_AMOUNT);
+
+        if (!paymentResult) {
+          toast.error('Оплата не была завершена');
+          return;
+        }
+
+        // Перенаправляем после успешной оплаты
+        router.replace('/chat');
+
+      } catch (e) {
+        console.error(e);
+        toast.error('Ошибка при обработке ответа от Phantom');
+        setTimeout(() => router.replace('/'), 1500);
+      }
+    })();
+  }
+}, [router, searchParams, processPayment]);
 
   return (
     <div style={{ padding: 40, textAlign: "center" }}>
