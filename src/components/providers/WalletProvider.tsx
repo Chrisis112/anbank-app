@@ -1,3 +1,4 @@
+"use client"
 import React, { FC, ReactNode, useMemo } from 'react';
 import {
   ConnectionProvider,

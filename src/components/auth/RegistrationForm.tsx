@@ -13,6 +13,7 @@ import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
 import { decryptPayload } from '@/utils/decryptPayload';
 import * as Linking from 'expo-linking';
+import { PublicKey } from '@solana/web3.js';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -83,6 +84,18 @@ export default function RegistrationForm() {
       setRegisterDataAfterConnect(null);
     }
   }, [isConnected, shouldRegisterAfterConnect, registerDataAfterConnect]);
+
+  useEffect(() => {
+  if (typeof window === 'undefined') return;
+  const key = localStorage.getItem('phantom_wallet_public_key');
+  if (key) {
+    try {
+      setPhantomWalletPublicKey(new PublicKey(key));
+    } catch {
+      localStorage.removeItem('phantom_wallet_public_key');
+    }
+  }
+}, []);
 
   // Обработка результата транзакции через deeplink
   useEffect(() => {
@@ -390,6 +403,7 @@ export default function RegistrationForm() {
             >
               Регистрация
             </button>
+            <p>Phantom: {phantomWalletPublicKey ? 'Подключен' : 'Не подключен'}</p>
             <button
               type="button"
               className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
