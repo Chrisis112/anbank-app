@@ -6,12 +6,11 @@ import bs58 from 'bs58';
 import { toast } from 'react-toastify';
 import { decryptPayload } from '@/utils/decryptPayload';
 
-export default function OnConnectPage() {
+export default function OnConnectClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Получаем параметры только в браузере
     if (typeof window === 'undefined') return;
 
     const phantom_encryption_public_key = searchParams.get('phantom_encryption_public_key');
@@ -22,13 +21,12 @@ export default function OnConnectPage() {
 
     if (errorCode) {
       toast.error(`Phantom connection error: ${errorMessage || errorCode}`);
-      router.replace('/'); // Вернуть пользователя на главную
+      router.replace('/');
       return;
     }
 
     if (phantom_encryption_public_key && nonce && data) {
       try {
-        // Получаем ранее сгенерированный dappKeyPair из localStorage
         const encodedDappSecretKey = localStorage.getItem('dappKeyPair_secretKey');
         if (!encodedDappSecretKey) throw new Error('Нет локального ключа приложения для дешифровки данных');
         const dappSecretKey = bs58.decode(encodedDappSecretKey);
