@@ -64,9 +64,6 @@ useEffect(() => {
   };
 }, []);
 
-  const handleDeepLink = ({ url }: { url: string }) => {
-    setDeepLink(url);
-  };
 
   // Обработка результата транзакции
   useEffect(() => {
