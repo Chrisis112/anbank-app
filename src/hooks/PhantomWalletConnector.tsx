@@ -19,7 +19,15 @@ const onDisconnectRedirectLink = typeof window !== 'undefined'
 export default function PhantomWalletConnector() {
   const [phantomWalletPublicKey, setPhantomWalletPublicKey] = useState<PublicKey | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [dappKeyPair] = useState(nacl.box.keyPair());
+    const [dappKeyPair] = useState(() => {
+  const keyPair = nacl.box.keyPair();
+  try {
+    localStorage.setItem('dappKeyPair_secretKey', bs58.encode(keyPair.secretKey));
+  } catch (e) {
+    console.warn('Не удалось сохранить секретный ключ в localStorage', e);
+  }
+  return keyPair;
+});
   const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
   const [session, setSession] = useState<string>();
   const [deepLink, setDeepLink] = useState<string>("");
@@ -37,6 +45,8 @@ export default function PhantomWalletConnector() {
       window.removeEventListener('popstate', handleDeepLink);
     };
   }, []);
+
+
 
   // Обработка входящих deeplinks
   useEffect(() => {
