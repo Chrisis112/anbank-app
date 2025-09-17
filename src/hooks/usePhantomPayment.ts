@@ -103,13 +103,11 @@ export const usePhantomPayment = () => {
           redirect_link: onSignAndSendTransactionRedirectLink,
           payload: bs58.encode(encryptedPayload),
         });
-console.log('Deeplink parameters:');
+        console.log('Deeplink URL parameters:');
 console.log('dapp_encryption_public_key:', bs58.encode(dappKeyPair.publicKey));
 console.log('nonce:', bs58.encode(nonce));
 console.log('redirect_link:', onSignAndSendTransactionRedirectLink);
-console.log('payload length:', encryptedPayload.length);
-console.log('payload (base58 encoded):', bs58.encode(encryptedPayload));
-
+console.log('payload (base58):', bs58.encode(encryptedPayload));
 
         const url = buildUrl("signAndSendTransaction", urlParams);
         window.open(url, "_blank");
