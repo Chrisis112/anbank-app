@@ -1,4 +1,4 @@
-// pages/onConnect.tsx
+"use client"
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import nacl from 'tweetnacl';
