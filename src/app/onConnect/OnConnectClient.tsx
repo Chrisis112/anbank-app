@@ -81,9 +81,9 @@ export default function OnConnectClient() {
         toast.success('Phantom Wallet успешно подключен!');
 
         setDappKeyPair({
-          publicKey: dappSecret.slice(32),
-          secretKey: dappSecret,
-        });
+  publicKey: dappSecret.slice(0, 32),
+  secretKey: dappSecret,
+});
 
         setReadyForPayment(true);
       } catch (e) {

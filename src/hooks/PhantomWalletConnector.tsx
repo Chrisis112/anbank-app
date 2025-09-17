@@ -36,7 +36,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         const secretKey = bs58.decode(saved);
         setDappKeyPair({
           secretKey,
-          publicKey: secretKey.slice(32),
+          publicKey: secretKey.slice(0, 32),
         });
       } else {
         const newKeyPair = nacl.box.keyPair();
@@ -157,7 +157,7 @@ const connectWallet = useCallback(async () => {
         if (savedKey) {
           const secretKey = bs58.decode(savedKey);
           newDappKeyPair = {
-            publicKey: secretKey.slice(32),
+            publicKey: secretKey.slice(0, 32),
             secretKey,
           };
         } else {
