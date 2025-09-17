@@ -218,15 +218,75 @@ useEffect(() => {
     }
   };
 
-  // Остальные методы остаются без изменений...
-  const handleLoginSubmit = async (email: string, password: string) => {
-    // ... существующая логика логина
-  };
 
-  const handleRenewSubscription = async () => {
-    // ... существующая логика продления подписки
-  };
+const handleLoginSubmit = async (email: string, password: string) => {
+  setLoginLoading(true);
+  setLoginError(null);
+  setLoginEmail(email);
 
+  try {
+    const data = await loginUser(email, password);
+
+    localStorage.setItem('token', data.token);
+
+    if (data.user) {
+      setUser({
+        id: data.user._id || data.user.id,
+        nickname: data.user.nickname,
+        email: data.user.email,
+        avatar: data.user.avatar || undefined,
+        role: data.user.role || 'newbie',
+        subscriptionExpiresAt: data.user.subscriptionExpiresAt || undefined,
+      });
+    }
+
+    toast.success('Login successful!');
+    setIsLoginModalOpen(false);
+    router.push('/chat');
+  } catch (err: any) {
+    if (err.response?.data?.reason === 'subscription_inactive') {
+      setIsLoginModalOpen(false);
+      setIsSubscriptionModalOpen(true);
+    } else {
+      setLoginError(err.response?.data?.error || 'Login error. Check your email and password.');
+    }
+  } finally {
+    setLoginLoading(false);
+  }
+};
+
+const handleRenewSubscription = async () => {
+  try {
+    if (!isConnected || !phantomWalletPublicKey) {
+      toast.error('Please connect your Phantom Wallet');
+      return;
+    }
+
+    const signature = await processPayment({
+      phantomWalletPublicKey,
+      session,
+      sharedSecret,
+      dappKeyPair,
+    });
+
+    if (!signature) {
+      toast.error('Payment failed or was cancelled');
+      return;
+    }
+
+    const solanaPublicKey = phantomWalletPublicKey.toBase58();
+
+    const data = await renewSubscription(signature, solanaPublicKey, loginEmail);
+    toast.success('Subscription successfully renewed!');
+    localStorage.setItem('token', data.token);
+    setUser(data.user);
+    setIsSubscriptionModalOpen(false);
+    router.push('/chat');
+  } catch (error: any) {
+    toast.error(error.message || 'Error renewing subscription');
+  }
+};
+  // Очищаем ошибки при загрузке
   return (
     <>
       <div className="bg-crypto-dark min-h-screen flex items-center justify-center px-4">
