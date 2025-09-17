@@ -217,7 +217,7 @@ export default function RegistrationForm() {
         return;
       }
 
-      if (!isConnected) {
+      if (!phantomWalletPublicKey) {
         if (!isPhantomInstalled) {
           toast.info(
             <>
