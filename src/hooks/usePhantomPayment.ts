@@ -1,148 +1,114 @@
-import { useState, useCallback } from 'react';
-import { Transaction, PublicKey, SystemProgram, LAMPORTS_PER_SOL, Connection, clusterApiUrl } from '@solana/web3.js';
-import nacl from 'tweetnacl';
+'use client';
+
+import { useCallback } from 'react';
+import axios from 'axios';
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import * as Linking from 'expo-linking';
 import bs58 from 'bs58';
-import { toast } from 'react-toastify';
+import nacl from 'tweetnacl';
 import { encryptPayload } from '@/utils/encryptPayload';
-
-function buildUrl(action: string, params: URLSearchParams): string {
-  const base = 'https://phantom.app/ul/v1';
-  return `${base}/${action}?${params.toString()}`;
-}
-
-const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
-const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.36');
-
-const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || clusterApiUrl('mainnet-beta');
-const connection = new Connection(rpcUrl);
-
-const onSignAndSendTransactionRedirectLink = typeof window !== 'undefined'
-  ? `${window.location.origin}/onSignAndSendTransaction`
-  : '/onSignAndSendTransaction';
+import { buildUrl } from '@/utils/buildUrl';
 
 interface PaymentParams {
-  phantomWalletPublicKey: PublicKey | null;
-  session: string | undefined;
-  sharedSecret: Uint8Array | undefined;
+  phantomWalletPublicKey: PublicKey;
+  session: string;
+  sharedSecret: Uint8Array;
   dappKeyPair: nacl.BoxKeyPair;
-}
-
-function isMobileDevice() {
-  if (typeof navigator === 'undefined') return false;
-  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent.toLowerCase());
+  token: string; // JWT токен для авторизации на сервере
+  amountOverride?: number; // опционально, сумма в SOL для платежа
 }
 
 export const usePhantomPayment = () => {
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-
-  const processPayment = useCallback(async (
-    params: PaymentParams,
-    customAmount?: number
-  ): Promise<string | null> => {
-    const { phantomWalletPublicKey, session, sharedSecret, dappKeyPair } = params;
-
-    if (!phantomWalletPublicKey || !session || !sharedSecret) {
-      toast.error('Phantom Wallet не подключен');
-      return null;
-    }
-
-    if (!RECEIVER_WALLET) {
-      toast.error('Адрес получателя не настроен');
-      return null;
-    }
-
-    setIsProcessingPayment(true);
+  const processPayment = useCallback(async (params: PaymentParams): Promise<string | null> => {
+    const { phantomWalletPublicKey, session, sharedSecret, dappKeyPair, token, amountOverride } = params;
 
     try {
-      const amount = customAmount || SOL_AMOUNT;
-      if (amount <= 0) {
-        throw new Error('Некорректная сумма платежа');
-      }
+      // Подключение к Solana mainnet
+      const connection = new Connection(
+        process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com'
+      );
 
+      // Получатель платежа
+      const receiverWallet = new PublicKey(
+        process.env.NEXT_PUBLIC_RECEIVER_WALLET || ''
+      );
+
+      // Сумма в SOL (берется из env или из параметров)
+      const amount = amountOverride ?? parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.001');
       const lamports = amount * LAMPORTS_PER_SOL;
 
-      // Проверка баланса
-      const balance = await connection.getBalance(phantomWalletPublicKey);
-      if (balance < lamports + 5000) {
-        throw new Error('Недостаточно средств на балансе');
-      }
-
-      const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
-
-      // Создание транзакции
-      const transaction = new Transaction().add(
+      // Создание транзакции перевода SOL
+      const transaction = new Transaction();
+      
+      transaction.add(
         SystemProgram.transfer({
           fromPubkey: phantomWalletPublicKey,
-          toPubkey: receiverPublicKey,
-          lamports: Math.floor(lamports),
+          toPubkey: receiverWallet,
+          lamports: lamports,
         })
       );
 
-      const latestBlockhash = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = latestBlockhash.blockhash;
-      transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
+      // Настройка транзакции
       transaction.feePayer = phantomWalletPublicKey;
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
 
-      if (isMobileDevice()) {
-        // Мобильное устройство — deeplink оплату
-        const serializedTransaction = transaction.serialize({
-          requireAllSignatures: false,
-          verifySignatures: false,
-        });
+      // Сериализация транзакции
+      const serializedTransaction = transaction.serialize({
+        requireAllSignatures: false,
+      });
 
-        const payload = {
-          session,
-          transaction: bs58.encode(serializedTransaction),
-        };
+      // Создание redirect ссылки для deeplink
+      const onSignAndSendTransactionRedirectLink = Linking.createURL('onSignAndSendTransaction');
 
-        const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
+      // Подготовка payload для Phantom
+      const payload = {
+        session,
+        transaction: bs58.encode(serializedTransaction),
+      };
 
-        const urlParams = new URLSearchParams({
-          dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-          nonce: bs58.encode(nonce),
-          redirect_link: onSignAndSendTransactionRedirectLink,
-          payload: bs58.encode(encryptedPayload),
-        });
+      // Шифрование payload
+      const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
 
-        console.log('Deeplink URL parameters:');
-        console.log('dapp_encryption_public_key:', bs58.encode(dappKeyPair.publicKey));
-        console.log('nonce:', bs58.encode(nonce));
-        console.log('redirect_link:', onSignAndSendTransactionRedirectLink);
-        console.log('payload (base58):', bs58.encode(encryptedPayload));
+      // Параметры для deeplink
+      const urlParams = new URLSearchParams({
+        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+        nonce: bs58.encode(nonce),
+        redirect_link: onSignAndSendTransactionRedirectLink,
+        payload: bs58.encode(encryptedPayload),
+      });
 
-        const url = buildUrl("signAndSendTransaction", urlParams);
-        console.log('Phantom deeplink URL:', url);
+      // Отправка транзакции в Phantom
+      const signUrl = buildUrl('signAndSendTransaction', urlParams);
+      await Linking.openURL(signUrl);
 
-        window.open(url, "_blank");
-        toast.info('Подтвердите транзакцию в Phantom Wallet');
-        return 'TRANSACTION_SENT_FOR_SIGNING';
-      } else {
-        // Десктоп — расширение Phantom
-        //@ts-ignore
-        const provider = window.solana;
-        if (!provider?.isPhantom) {
-          throw new Error('Phantom расширение не найдено');
-        }
+      // После успешной подписи надо подтвердить платеж на сервере
+      // Здесь ждем, что deeplink с подписью транзакции будет обработан в компоненте
 
-        const signedTransaction = await provider.signTransaction(transaction);
-        const txid = await connection.sendRawTransaction(signedTransaction.serialize());
-        await connection.confirmTransaction(txid);
+      return 'TRANSACTION_SENT_FOR_SIGNING';
 
-        toast.success(`Платеж успешно отправлен, TxID: ${txid}`);
-
-        return txid;
-      }
-    } catch (error: any) {
-      console.error('Ошибка обработки платежа:', error);
-      toast.error(`Ошибка платежа: ${error?.message || 'Неизвестная ошибка'}`);
-      return null;
-    } finally {
-      setIsProcessingPayment(false);
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      throw error;
     }
   }, []);
 
-  return {
-    processPayment,
-    isProcessingPayment,
-  };
+  // Новый метод для подтверждения платежа на сервере
+  const confirmPaymentOnServer = useCallback(async (transactionId: string, amount: number, token: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.anbanktoken.com/api';
+
+    try {
+      const response = await axios.post(
+        `${apiUrl}/payments/confirm`,
+        { transactionId, amount },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Payment confirmation server error:', error);
+      throw error;
+    }
+  }, []);
+
+  return { processPayment, confirmPaymentOnServer };
 };

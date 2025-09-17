@@ -1,12 +1,12 @@
-import nacl from "tweetnacl";
-import bs58 from "bs58";
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
 
 export const decryptPayload = (
   data: string,
   nonce: string,
   sharedSecret?: Uint8Array
 ) => {
-  if (!sharedSecret) throw new Error("missing shared secret");
+  if (!sharedSecret) throw new Error('missing shared secret');
   
   const decryptedData = nacl.box.open.after(
     bs58.decode(data),
@@ -15,8 +15,8 @@ export const decryptPayload = (
   );
   
   if (!decryptedData) {
-    throw new Error("Unable to decrypt data");
+    throw new Error('Unable to decrypt data');
   }
   
-  return JSON.parse(Buffer.from(decryptedData).toString("utf8"));
+  return JSON.parse(Buffer.from(decryptedData).toString('utf8'));
 };

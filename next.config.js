@@ -1,17 +1,56 @@
-/** @type {import('next').NextConfig} */
+const { withExpo } = require('@expo/next-adapter');
 
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  images: {
-    domains: ['your-domain.s3.amazonaws.com'],
+  reactStrictMode: true,
+  swcMinify: true,
+  transpilePackages: [
+    'react-native',
+    'react-native-web',
+    'expo',
+    'expo-linking',
+    'expo-constants',
+    '@expo/next-adapter',
+    'react-native-svg'
+  ],
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        stream: false,
+        http: false,
+        https: false,
+        zlib: false,
+        path: false,
+        os: false,
+      };
+    }
+    return config;
   },
-  async rewrites() {
+  experimental: {
+    forceSwcTransforms: true,
+  },
+  async headers() {
     return [
       {
-        source: '/api/:path*',
-        destination: 'http://localhost:3001/api/:path*',
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+        ],
       },
     ];
   },
 };
 
-module.exports = nextConfig;
+module.exports = withExpo(nextConfig);

@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "CryptoChat",
+    "slug": "crypto-chat",
+    "scheme": "cryptochat",
+    "version": "1.0.0",
+    "platforms": ["web", "ios", "android"],
+    "web": {
+      "bundler": "webpack"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "bundleIdentifier": "com.anbanktoken.cryptochat",
+      "associatedDomains": ["applinks:app.anbanktoken.com"],
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.anbanktoken.cryptochat",
+      "autoVerify": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "https",
+              "host": "app.anbanktoken.com"
+            },
+            {
+              "scheme": "cryptochat"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    }
+  }
+}

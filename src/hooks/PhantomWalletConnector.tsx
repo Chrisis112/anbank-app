@@ -1,153 +1,141 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { toast } from 'react-toastify';
+'use client';
 
+import { useState, useEffect, useCallback } from 'react';
+import { PublicKey } from '@solana/web3.js';
+import * as Linking from 'expo-linking';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
-import { PublicKey } from '@solana/web3.js';
 import { decryptPayload } from '@/utils/decryptPayload';
-import { encryptPayload } from '@/utils/encryptPayload';
-import buildUrl from '@/utils/buildUrl';
 
-const onConnectRedirectLink = typeof window !== 'undefined'
-  ? `${window.location.origin}/onConnect`
-  : '/onConnect';
+interface PhantomWalletConnectorReturn {
+  phantomWalletPublicKey: PublicKey | null;
+  isConnected: boolean;
+  isConnecting: boolean;
+  session: string | undefined;
+  sharedSecret: Uint8Array | undefined;
+  dappKeyPair: nacl.BoxKeyPair;
+  connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
+}
 
-const onDisconnectRedirectLink = typeof window !== 'undefined'
-  ? `${window.location.origin}/onDisconnect`
-  : '/onDisconnect';
-
-export default function PhantomWalletConnector() {
+export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const [phantomWalletPublicKey, setPhantomWalletPublicKey] = useState<PublicKey | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-const [dappKeyPair] = useState(() => {
-  const keyPair = nacl.box.keyPair();
-  try {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('dappKeyPair_secretKey', bs58.encode(keyPair.secretKey));
-    }
-  } catch (e) {
-    console.warn('Не удалось сохранить секретный ключ в localStorage', e);
-  }
-  return keyPair;
-});
-
-  const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
   const [session, setSession] = useState<string>();
-  const [deepLink, setDeepLink] = useState<string>("");
+  const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
+  const [deepLink, setDeepLink] = useState<string>('');
+  const [dappKeyPair] = useState(() => nacl.box.keyPair());
 
-  // Для веба слушаем изменения URL через popstate и initial загрузку
-  useEffect(() => {
-    const handleDeepLink = () => {
-      setDeepLink(window.location.href);
-    };
+  // Создание redirect ссылок
+  const onConnectRedirectLink = Linking.createURL('onConnect');
+  const onDisconnectRedirectLink = Linking.createURL('onDisconnect');
 
-    handleDeepLink(); // initial check
-
-    window.addEventListener('popstate', handleDeepLink);
-    return () => {
-      window.removeEventListener('popstate', handleDeepLink);
-    };
+  // Обработчик deeplinks
+  const handleDeepLink = useCallback(({ url }: { url: string }) => {
+    setDeepLink(url);
   }, []);
 
+  // Инициализация deeplink слушателя
+  useEffect(() => {
+    const initializeDeeplinks = async () => {
+      // Проверяем начальный URL (если приложение открыто через deeplink)
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        setDeepLink(initialUrl);
+      }
+    };
 
+    initializeDeeplinks();
+
+    // Подписываемся на события URL
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [handleDeepLink]);
 
   // Обработка входящих deeplinks
   useEffect(() => {
     if (!deepLink) return;
 
-    const url = new URL(deepLink);
-    const params = url.searchParams;
+    try {
+      const url = new URL(deepLink);
+      const params = url.searchParams;
 
-    // Ошибка от Phantom
-    if (params.get("errorCode")) {
-      const error = Object.fromEntries([...params]);
-      const message = error?.errorMessage ?? JSON.stringify(error, null, 2);
-      console.log("Phantom error:", message);
-      toast.error(`Phantom error: ${message}`);
-      return;
-    }
+      // Обработка ошибок от Phantom
+      if (params.get('errorCode')) {
+        const error = Object.fromEntries([...params]);
+        const message = error?.errorMessage ?? 'Unknown error';
+        console.error('Phantom error:', message);
+        setIsConnecting(false);
+        return;
+      }
 
-    // Обработка ответа connect
-    if (/onConnect/.test(url.pathname)) {
-      const sharedSecretDapp = nacl.box.before(
-        bs58.decode(params.get("phantom_encryption_public_key")!),
-        dappKeyPair.secretKey
-      );
+      // Обработка успешного подключения
+      if (/onConnect/.test(url.pathname)) {
+        const sharedSecretDapp = nacl.box.before(
+          bs58.decode(params.get('phantom_encryption_public_key')!),
+          dappKeyPair.secretKey
+        );
 
-      const connectData = decryptPayload(
-        params.get("data")!,
-        params.get("nonce")!,
-        sharedSecretDapp
-      );
+        const connectData = decryptPayload(
+          params.get('data')!,
+          params.get('nonce')!,
+          sharedSecretDapp
+        );
 
-      setSharedSecret(sharedSecretDapp);
-      setSession(connectData.session);
-      setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
+        setSharedSecret(sharedSecretDapp);
+        setSession(connectData.session);
+        setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
+        setIsConnecting(false);
 
-      console.log(`Connected to ${connectData.public_key.toString()}`);
-      toast.success('Phantom Wallet подключен!');
-    }
+        console.log(`Connected to Phantom: ${connectData.public_key}`);
+        return;
+      }
 
-    // Обработка отключения
-    if (/onDisconnect/.test(url.pathname)) {
-      setPhantomWalletPublicKey(null);
-      setSession(undefined);
-      setSharedSecret(undefined);
-      console.log("disconnected");
-      toast.info('Phantom Wallet отключен');
+      // Обработка отключения
+      if (/onDisconnect/.test(url.pathname)) {
+        setPhantomWalletPublicKey(null);
+        setSession(undefined);
+        setSharedSecret(undefined);
+        console.log('Disconnected from Phantom');
+        return;
+      }
+    } catch (error) {
+      console.error('Error processing deeplink:', error);
+      setIsConnecting(false);
     }
   }, [deepLink, dappKeyPair.secretKey]);
 
-  const handleConnectWallet = useCallback(async () => {
-    if (phantomWalletPublicKey) {
-      toast.info('Phantom Wallet уже подключен');
-      return;
-    }
-
-    setIsConnecting(true);
+  // Функция подключения к Phantom
+  const connectWallet = useCallback(async () => {
     try {
+      setIsConnecting(true);
+
       const params = new URLSearchParams({
         dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-        cluster: "mainnet-beta", // либо devnet
-        app_url: typeof window !== 'undefined' ? window.location.origin : "https://cryptochat.app",
+        cluster: 'mainnet-beta',
+        app_url: 'https://app.anbanktoken.com',
         redirect_link: onConnectRedirectLink,
       });
 
-      const url = buildUrl("connect", params);
-      window.open(url, "_blank");
+      const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
+      
+      await Linking.openURL(connectUrl);
     } catch (error) {
-      console.error('Ошибка при открытии Phantom:', error);
-      toast.error('Не удалось открыть Phantom Wallet');
-    } finally {
+      console.error('Error connecting to Phantom:', error);
       setIsConnecting(false);
     }
-  }, [phantomWalletPublicKey, dappKeyPair.publicKey]);
+  }, [dappKeyPair.publicKey, onConnectRedirectLink]);
 
-  const handleDisconnectWallet = useCallback(async () => {
-    if (!session || !sharedSecret) {
-      toast.error('Нет активной сессии для отключения');
-      return;
-    }
-
-    try {
-      const payload = { session };
-      const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
-
-      const params = new URLSearchParams({
-        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-        nonce: bs58.encode(nonce),
-        redirect_link: onDisconnectRedirectLink,
-        payload: bs58.encode(encryptedPayload),
-      });
-
-      const url = buildUrl("disconnect", params);
-      window.open(url, "_blank");
-    } catch (error) {
-      console.error('Ошибка отключения Phantom:', error);
-      toast.error('Не удалось отключить Phantom Wallet');
-    }
-  }, [session, sharedSecret, dappKeyPair.publicKey]);
-
+  // Функция отключения от Phantom
+  const disconnectWallet = useCallback(() => {
+    setPhantomWalletPublicKey(null);
+    setSession(undefined);
+    setSharedSecret(undefined);
+    setIsConnecting(false);
+  }, []);
 
   return {
     phantomWalletPublicKey,
@@ -156,7 +144,7 @@ const [dappKeyPair] = useState(() => {
     session,
     sharedSecret,
     dappKeyPair,
-    connectWallet: handleConnectWallet,
-    disconnectWallet: handleDisconnectWallet,
+    connectWallet,
+    disconnectWallet,
   };
 }
