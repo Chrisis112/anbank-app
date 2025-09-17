@@ -54,35 +54,24 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   }, []);
 
   // Восстановление публичного ключа, сессии и sharedSecret из localStorage при монтировании
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+useEffect(() => {
+  if (typeof window === 'undefined') return;
 
-    const storedKey = localStorage.getItem('phantom_public_key');
-    const storedSession = localStorage.getItem('phantom_session');
-    const storedSharedSecret = localStorage.getItem('phantom_shared_secret');
+  const storedPubKey = localStorage.getItem('phantom_public_key');
+  const storedSession = localStorage.getItem('phantom_session');
+  const storedSecret = localStorage.getItem('phantom_shared_secret');
 
-    if (storedKey) {
-      try {
-        setPhantomWalletPublicKey(new PublicKey(storedKey));
-      } catch {
-        localStorage.removeItem('phantom_public_key');
-        setPhantomWalletPublicKey(null);
-      }
+  if (storedPubKey) {
+    try {
+      setPhantomWalletPublicKey(new PublicKey(storedPubKey));
+    } catch {
+      localStorage.removeItem('phantom_public_key');
+      setPhantomWalletPublicKey(null);
     }
-
-    if (storedSession) {
-      setSession(storedSession);
-    }
-
-    if (storedSharedSecret) {
-      try {
-        setSharedSecret(bs58.decode(storedSharedSecret));
-      } catch {
-        localStorage.removeItem('phantom_shared_secret');
-        setSharedSecret(undefined);
-      }
-    }
-  }, []);
+  }
+  if (storedSession) setSession(storedSession);
+  if (storedSecret) setSharedSecret(bs58.decode(storedSecret));
+}, []);
 
   const onConnectRedirectLink = Linking.createURL('onConnect');
   const onDisconnectRedirectLink = Linking.createURL('onDisconnect');
@@ -101,14 +90,28 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     const subscription = Linking.addEventListener('url', handleDeepLink);
     return () => subscription?.remove();
   }, [handleDeepLink]);
-
-  useEffect(() => {
-    if (!deepLink || !dappKeyPair) return;
-
+useEffect(() => {
+  // Функция-обработчик, поскольку useEffect не может принимать async напрямую,
+  // делаем внутри async функцию и вызываем её
+  const connectAndProcessDeepLink = async () => {
     try {
+      // Подключаемся к Phantom (если пользователь ещё не подключён)
+      const resp = await window.solana.connect();
+      const pubKeyStr = resp.publicKey.toString();
+
+      // Устанавливаем публичный ключ в состояние (в вашем случае - React state)
+      setPhantomWalletPublicKey(new PublicKey(pubKeyStr));
+      // Сохраняем публичный ключ в localStorage для восстановления после обновления страницы
+      localStorage.setItem('phantom_public_key', pubKeyStr);
+
+      // Если нет deeplink или dappKeyPair - дальше не обрабатываем
+      if (!deepLink || !dappKeyPair) return;
+
+      // Разбираем URL из deeplink
       const url = new URL(deepLink);
       const params = url.searchParams;
 
+      // Если пришла ошибка от Phantom - выводим и останавливаем подключение
       if (params.get('errorCode')) {
         const error = Object.fromEntries([...params]);
         const message = error?.errorMessage ?? 'Unknown error';
@@ -117,32 +120,39 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         return;
       }
 
+      // Обработка успешного подключения (берем данные из deeplink)
       if (/onConnect/.test(url.pathname)) {
+        // Вычисляем общий секрет шифрования
         const sharedSecretDapp = nacl.box.before(
           bs58.decode(params.get('phantom_encryption_public_key')!),
           dappKeyPair.secretKey
         );
 
+        // Расшифровываем данные из deeplink
         const connectData = decryptPayload(
           params.get('data')!,
           params.get('nonce')!,
           sharedSecretDapp
         );
 
+        // Устанавливаем полученные данные в состояние
         setSharedSecret(sharedSecretDapp);
         setSession(connectData.session);
-        setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
-        setIsConnecting(false);
-        console.log(`Connected to Phantom: ${connectData.public_key}`);
 
-        // Сохраняем в localStorage для перезагрузок
+        // Сохраняем публичный ключ пользователя, который пришел в connectData (на всякий случай)
+        setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
         localStorage.setItem('phantom_public_key', connectData.public_key);
+
+        // Сохраняем прочие данные для восстановления
         localStorage.setItem('phantom_session', connectData.session);
         localStorage.setItem('phantom_shared_secret', bs58.encode(sharedSecretDapp));
+
+        console.log(`Connected to Phantom: ${connectData.public_key}`);
 
         return;
       }
 
+      // Обработка отключения кошелька
       if (/onDisconnect/.test(url.pathname)) {
         setPhantomWalletPublicKey(null);
         setSession(undefined);
@@ -156,10 +166,13 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         return;
       }
     } catch (error) {
-      console.error('Error processing deeplink:', error);
+      console.error('Error processing deeplink or connecting to Phantom:', error);
       setIsConnecting(false);
     }
-  }, [deepLink, dappKeyPair]);
+  };
+
+  connectAndProcessDeepLink();
+}, [deepLink, dappKeyPair]);
 
   const connectWallet = useCallback(async () => {
     try {
