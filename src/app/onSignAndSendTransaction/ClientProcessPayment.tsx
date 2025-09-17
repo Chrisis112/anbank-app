@@ -22,14 +22,16 @@ export default function ClientProcessPayment() {
         const encodedSecretKey = localStorage.getItem('dappKeyPair_secretKey');
         if (!encodedSecretKey) throw new Error('Ключ приложения не найден');
 
-        const secretKey = bs58.decode(encodedSecretKey);
-        // Восстановите sharedSecret здесь, как при подключении Phantom
-        // const sharedSecret = ...
+        const encodedSharedSecretBase58 = localStorage.getItem('phantom_shared_secret');
+        if (!encodedSharedSecretBase58) throw new Error('Shared secret не найден');
 
+        const sharedSecret = bs58.decode(encodedSharedSecretBase58);
+
+        // Теперь дешифруем payload с помощью общего секрета
         const decryptedData = decryptPayload(
           encodedPayload,
           encodedNonce,
-          /* sharedSecret */
+          sharedSecret
         );
 
         toast.success('Платеж прошёл успешно!');
@@ -44,7 +46,9 @@ export default function ClientProcessPayment() {
     processResponse();
   }, [searchParams, router]);
 
-  if (loading) return <p>Обработка платежа...</p>;
+  if (loading) {
+    return <p>Обработка платежа...</p>;
+  }
 
   return <p>Обработка завершена</p>;
 }
