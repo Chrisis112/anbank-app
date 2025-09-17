@@ -124,23 +124,45 @@ const connectWallet = useCallback(async () => {
 
     // Проверяем, установлен ли Phantom (desktop)
     if (typeof window !== 'undefined' && window.solana?.isPhantom) {
+      // Подключаемся к Phantom расширению
       const resp = await window.solana.connect();
       setPhantomWalletPublicKey(new PublicKey(resp.publicKey.toString()));
-      // Здесь нужно реализовать генерацию/получение dappKeyPair и сессии,
-      // либо перейти на deeplink flow при необходимости
+
+      // TODO: реализуем генерацию/загрузку dappKeyPair и session для desktop
+      // Генерируем новый ключевой пэйр (или загружаем из localStorage)
+      let newDappKeyPair: nacl.BoxKeyPair;
+      const savedKey = localStorage.getItem('dappKeyPair_secretKey');
+      if (savedKey) {
+        const secretKey = bs58.decode(savedKey);
+        newDappKeyPair = {
+          publicKey: secretKey.slice(32),
+          secretKey,
+        };
+      } else {
+        newDappKeyPair = nacl.box.keyPair();
+        localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newDappKeyPair.secretKey));
+      }
+      setDappKeyPair(newDappKeyPair);
+
+      // Для desktop нельзя получить `phantom_encryption_public_key` при connect,
+      // поэтому sharedSecret можно временно не устанавливать или реализовать отдельный flow.
+      // session можно сгенерировать самодельный уникальный идентификатор или null
+      const generatedSession = crypto.randomUUID?.() || null;
+      setSession(generatedSession || undefined);
+      setSharedSecret(undefined); // Установите как undefined, т.к. sharedSecret для desktop специфичен
+
       setIsConnecting(false);
     } else {
-      // Если Phantom не установлен, открываем deeplink или показываем ошибку
-     if (!dappKeyPair) {
-  throw new Error('dappKeyPair не инициализирован');
-}
+      // Если Phantom не установлен (мобильный сценарий)
+      if (!dappKeyPair) throw new Error('dappKeyPair не инициализирован');
 
-const params = new URLSearchParams({
-  dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-  cluster: 'mainnet-beta',
-  app_url: 'https://app.anbanktoken.com',
-  redirect_link: onConnectRedirectLink,
-});
+      const params = new URLSearchParams({
+        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+        cluster: 'mainnet-beta',
+        app_url: 'https://app.anbanktoken.com',
+        redirect_link: onConnectRedirectLink,
+      });
+
       const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
       await Linking.openURL(connectUrl);
     }
@@ -148,7 +170,7 @@ const params = new URLSearchParams({
     console.error('Error connecting to Phantom:', error);
     setIsConnecting(false);
   }
-}, [dappKeyPair?.publicKey, onConnectRedirectLink]);
+}, [dappKeyPair, onConnectRedirectLink]);
 
   const disconnectWallet = useCallback(() => {
     setPhantomWalletPublicKey(null);

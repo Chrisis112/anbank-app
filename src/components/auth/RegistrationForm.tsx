@@ -56,9 +56,7 @@ export default function RegistrationForm() {
       setDeepLink(url);
     });
 
-    return () => {
-      subscription?.remove();
-    };
+    return () => subscription?.remove();
   }, []);
 
   // Обработка результата транзакции
@@ -81,7 +79,6 @@ export default function RegistrationForm() {
         if (signAndSendTransactionData.signature) {
           toast.success(`Платеж успешно обработан!`);
 
-          // Завершаем регистрацию после успешного платежа
           if (pendingRegistrationData) {
             completeRegistration(pendingRegistrationData, signAndSendTransactionData.signature);
           }
@@ -192,8 +189,23 @@ export default function RegistrationForm() {
         return;
       }
 
-      // Регистрация с оплатой через Phantom
+      // Проверка наличия Phantom кошелька в браузере (desktop)
+      const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
+
       if (!isConnected) {
+        if (!isPhantomInstalled) {
+          toast.info(
+            <>
+              Чтобы подключить Phantom Wallet, установите расширение для браузера или приложение mobile Phantom:
+              <br />
+              <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
+                https://phantom.app/download
+              </a>
+            </>
+          );
+          setRegisterLoading(false);
+          return;
+        }
         toast.info('Сначала подключите Phantom Wallet');
         await connectWallet();
         setRegisterLoading(false);
@@ -273,9 +285,9 @@ export default function RegistrationForm() {
 
       const signature = await processPayment({
         phantomWalletPublicKey,
-        session: session!, // гарантируем, что session не undefined
-        sharedSecret: sharedSecret!, // гарантируем, что не undefined
-        dappKeyPair: dappKeyPair!, // утверждаем, что не null
+        session: session!,
+        sharedSecret: sharedSecret!,
+        dappKeyPair: dappKeyPair!,
         token: localStorage.getItem('token') || '',
       });
 
@@ -296,9 +308,7 @@ export default function RegistrationForm() {
       toast.error(error.message || 'Ошибка продления подписки');
     }
   };
-
-  const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
-
+    const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
   return (
     <>
       <div className="bg-crypto-dark min-h-screen flex items-center justify-center px-4">
@@ -322,19 +332,14 @@ export default function RegistrationForm() {
                 {!isPhantomInstalled && (
                   <p className="text-red-500 mb-2">
                     Пожалуйста, установите Phantom Wallet:{' '}
-                    <a
-                      href="https://phantom.app/download"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline"
-                    >
+                    <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
                       https://phantom.app/download
                     </a>
                   </p>
                 )}
                 <button
                   onClick={connectWallet}
-                  disabled={isConnecting || !isPhantomInstalled}
+                  disabled={isConnecting}
                   className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                 >
                   {isConnecting ? 'Подключение...' : 'Подключить Phantom'}
