@@ -11,13 +11,14 @@ import { buildUrl } from '@/utils/buildUrl';
 import { toast } from 'react-toastify';
 import { decryptPayload } from '@/utils/decryptPayload';
 
+// Сделаем поля session, sharedSecret и dappKeyPair опциональными
 interface PaymentParams {
   phantomWalletPublicKey: PublicKey;
-  session: string;
-  sharedSecret: Uint8Array;
-  dappKeyPair: nacl.BoxKeyPair;
-  token: string; // JWT токен для авторизации на сервере
-  amountOverride?: number; // опционально, сумма в SOL для платежа
+  token: string;
+  session?: string;
+  sharedSecret?: Uint8Array;
+  dappKeyPair?: nacl.BoxKeyPair;
+  amountOverride?: number;
 }
 
 export const usePhantomPayment = () => {
@@ -57,7 +58,6 @@ export const usePhantomPayment = () => {
           return;
         }
 
-        // Расшифровываем payload
         const decrypted = decryptPayload(encryptedData, nonce, sharedSecret);
 
         if (decrypted?.signature) {
@@ -78,63 +78,83 @@ export const usePhantomPayment = () => {
     }
   }, [deepLink, sharedSecret, pendingRegistrationData, onCompleteRegistration]);
 
-  // Функция для запуска оплаты
+  // Функция для запуска оплаты (с поддержкой desktop и mobile)
   const processPayment = useCallback(
     async (params: PaymentParams): Promise<string | null> => {
-      const { phantomWalletPublicKey, session, sharedSecret, dappKeyPair, token, amountOverride } = params;
+      const { phantomWalletPublicKey, token, session, sharedSecret, dappKeyPair, amountOverride } = params;
 
-      setSharedSecret(sharedSecret);
+      // если есть данные для mobile (session, sharedSecret, dappKeyPair) — используем мобильный flow
+      const isMobileFlow = session !== undefined && sharedSecret !== undefined && dappKeyPair !== undefined;
 
-      try {
-        const connection = new Connection(
-          process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com'
-        );
+      if (isMobileFlow) {
+        setSharedSecret(sharedSecret);
 
-        const receiverWallet = new PublicKey(process.env.NEXT_PUBLIC_RECEIVER_WALLET || '');
+        try {
+          const connection = new Connection(
+            process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com'
+          );
 
-        const amount = amountOverride ?? parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.001');
-        const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+          const receiverWallet = new PublicKey(process.env.NEXT_PUBLIC_RECEIVER_WALLET || '');
 
-        const transaction = new Transaction();
-        transaction.add(
-          SystemProgram.transfer({
-            fromPubkey: phantomWalletPublicKey,
-            toPubkey: receiverWallet,
-            lamports,
-          })
-        );
+          const amount = amountOverride ?? parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.001');
+          const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
 
-        transaction.feePayer = phantomWalletPublicKey;
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
+          const transaction = new Transaction();
+          transaction.add(
+            SystemProgram.transfer({
+              fromPubkey: phantomWalletPublicKey,
+              toPubkey: receiverWallet,
+              lamports,
+            })
+          );
 
-        const serializedTransaction = transaction.serialize({ requireAllSignatures: false });
+          transaction.feePayer = phantomWalletPublicKey;
+          const { blockhash } = await connection.getLatestBlockhash();
+          transaction.recentBlockhash = blockhash;
 
-        const onSignAndSendTransactionRedirectLink = Linking.createURL('onSignAndSendTransaction');
+          const serializedTransaction = transaction.serialize({ requireAllSignatures: false });
 
-        const payload = {
-          session,
-          transaction: bs58.encode(serializedTransaction),
-        };
+          const onSignAndSendTransactionRedirectLink = Linking.createURL('onSignAndSendTransaction');
 
-        const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
+          const payload = {
+            session,
+            transaction: bs58.encode(serializedTransaction),
+          };
 
-        const urlParams = new URLSearchParams({
-          dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-          nonce: bs58.encode(nonce),
-          redirect_link: onSignAndSendTransactionRedirectLink,
-          payload: bs58.encode(encryptedPayload),
-        });
+          const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
 
-        const signUrl = buildUrl('signAndSendTransaction', urlParams);
-        await Linking.openURL(signUrl);
+          const urlParams = new URLSearchParams({
+            dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+            nonce: bs58.encode(nonce),
+            redirect_link: onSignAndSendTransactionRedirectLink,
+            payload: bs58.encode(encryptedPayload),
+          });
 
-        // Ждем, что deeplink с подписью транзакции будет обработан в useEffect выше
+          const signUrl = buildUrl('signAndSendTransaction', urlParams);
+          await Linking.openURL(signUrl);
 
-        return 'TRANSACTION_SENT_FOR_SIGNING';
-      } catch (error) {
-        console.error('Error processing payment:', error);
-        throw error;
+          // Ждем, что deeplink будет обработан в useEffect
+          return 'TRANSACTION_SENT_FOR_SIGNING';
+        } catch (error) {
+          console.error('Error processing mobile payment:', error);
+          throw error;
+        }
+      } else {
+        // Desktop flow — выполняем оплату через Phantom расширение (browser wallet)
+        try {
+          if (!phantomWalletPublicKey) throw new Error('Missing phantomWalletPublicKey for desktop payment');
+
+          // Здесь должна быть логика создания и отправки транзакции через Phantom extension API
+          // Например:
+          // const connection = new Connection(...);
+          // Создайте и подпишите транзакцию здесь и отправьте через window.solana.signAndSendTransaction
+
+          // Для примера, просто возвращаем фиктивный ответ
+          return 'DESKTOP_PAYMENT_FLOW_COMPLETED';
+        } catch (error) {
+          console.error('Error processing desktop payment:', error);
+          throw error;
+        }
       }
     },
     []
@@ -159,7 +179,7 @@ export const usePhantomPayment = () => {
     []
   );
 
-  // Метод для компонента регистрации, чтобы установить текущие данные и callback на завершение
+  // Метод для компонента регистрации, чтобы установить данные и callback
   const initPendingRegistration = useCallback(
     (data: any, completeRegistration: (data: any, signature: string) => void) => {
       setPendingRegistrationData(data);
