@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { decryptPayload } from '@/utils/decryptPayload';
 import bs58 from 'bs58';
+import * as nacl from 'tweetnacl';
+
 
 export default function PhantomRedirect() {
   const router = useRouter();
