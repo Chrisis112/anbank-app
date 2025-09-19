@@ -1,6 +1,7 @@
 'use client';
+
 import { useEffect } from 'react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';  // <-- ВАЖНО: импорт из next/navigation
 import { decryptPayload } from '@/utils/decryptPayload';
 
 export default function PhantomRedirect() {
@@ -11,13 +12,12 @@ export default function PhantomRedirect() {
       const urlParams = new URLSearchParams(window.location.search);
       const action = urlParams.get('action');
 
-      // Получаем все параметры из URL
+      // Получаем параметры из URL
       const data = urlParams.get('data');
       const nonce = urlParams.get('nonce');
       const phantomEncryptionPublicKey = urlParams.get('phantom_encryption_public_key');
 
       if (action === 'connect' && data && nonce && phantomEncryptionPublicKey) {
-        // Отправляем данные в родительское окно
         if (window.opener) {
           window.opener.postMessage({
             type: 'PHANTOM_DEEPLINK',
@@ -26,7 +26,6 @@ export default function PhantomRedirect() {
           window.close();
         }
       } else if (action === 'signAndSendTransaction') {
-        // Обработка результата транзакции
         try {
           const sharedSecret = localStorage.getItem('phantom_shared_secret');
           if (sharedSecret && data && nonce) {
@@ -57,7 +56,6 @@ export default function PhantomRedirect() {
         }
       }
 
-      // Если нет opener, перенаправляем на главную
       if (!window.opener) {
         router.push('/');
       }
