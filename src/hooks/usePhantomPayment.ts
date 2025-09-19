@@ -4,7 +4,17 @@ import { useCallback } from 'react';
 import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { toast } from 'react-toastify';
 
+
 export const usePhantomPayment = () => {
+
+  interface PaymentParams {
+  phantomWalletPublicKey: PublicKey;
+  session?: string;
+  sharedSecret?: Uint8Array;
+  dappKeyPair?: nacl.BoxKeyPair;
+  token?: string;
+  amountOverride?: number;
+}
   const processPayment = useCallback(
     async (params: { phantomWalletPublicKey: PublicKey; amountOverride?: number }) => {
       const { phantomWalletPublicKey, amountOverride } = params;
