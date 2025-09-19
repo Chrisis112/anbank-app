@@ -1,4 +1,4 @@
-import nacl from 'tweetnacl';
+import * as nacl from 'tweetnacl';
 import bs58 from 'bs58';
 
 export function decryptPayload(
@@ -9,9 +9,9 @@ export function decryptPayload(
   try {
     const encryptedData = bs58.decode(data);
     const nonceArray = bs58.decode(nonce);
-    
+
+    // Используем метод подписи с общим секретом
     const decrypted = nacl.box.open.after(encryptedData, nonceArray, sharedSecret);
-    
     if (!decrypted) {
       throw new Error('Failed to decrypt payload');
     }

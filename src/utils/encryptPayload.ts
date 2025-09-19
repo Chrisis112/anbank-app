@@ -1,4 +1,4 @@
-import nacl from 'tweetnacl';
+import * as nacl from 'tweetnacl';
 
 export function encryptPayload(
   payload: any,
