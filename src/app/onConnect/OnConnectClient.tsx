@@ -11,20 +11,6 @@ import { PublicKey } from '@solana/web3.js';
 
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || "0.36");
 
-function getDappPair(): nacl.BoxKeyPair | null {
-  try {
-    const encodedSecretKey = localStorage.getItem('dappPair_secretKey');
-    if (!encodedSecretKey) return null;
-    const secretKey = bs58.decode(encodedSecretKey);
-    const keyPair = {
-      publicKey: secretKey.slice(32,64),
-      secretKey,
-    };
-    return keyPair;
-  } catch {
-    return null;
-  }
-}
 
 export default function OnConnectClient() {
   const router = useRouter();
@@ -36,7 +22,7 @@ export default function OnConnectClient() {
   const [session, setSession] = useState<string | undefined>();
   const [readyForPayment, setReadyForPayment] = useState(false);
   const [paymentInProgress, setPaymentInProgress] = useState(false);
-  const [dappPair, setDappPair] = useState<nacl.BoxKeyPair | null>(null);
+  const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -80,7 +66,7 @@ export default function OnConnectClient() {
 
         toast.success('Phantom Wallet успешно подключен!');
 
-        setDappPair({
+        setDappKeyPair({
   publicKey: dappSecret.slice(32, 64),
   secretKey: dappSecret,
 });
@@ -94,7 +80,7 @@ export default function OnConnectClient() {
   }, [router, searchParams]);
 
   const handleStartPayment = async () => {
-    if (!phantomWalletPublicKey || !session || !sharedSecret || !dappPair) {
+    if (!phantomWalletPublicKey || !session || !sharedSecret || !dappKeyPair) {
       toast.error('Отсутствуют данные для оплаты');
       return;
     }
@@ -104,7 +90,7 @@ const paymentResult = await processPayment({
   phantomWalletPublicKey,
   session,
   sharedSecret,
-  dappPair,
+  dappKeyPair,
   amountOverride: SOL_AMOUNT,
   token: localStorage.getItem('token') || '',
 });
