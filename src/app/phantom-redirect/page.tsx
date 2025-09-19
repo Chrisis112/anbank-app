@@ -21,20 +21,20 @@ export default function PhantomRedirect() {
           const phantomEncryptionPublicKey = urlParams.get('phantom_encryption_public_key');
 
           if (data && nonce && phantomEncryptionPublicKey) {
-            const savedKeyPair = localStorage.getItem('dappKeyPair_secretKey');
+            const savedKeyPair = localStorage.getItem('dappPair_secretKey');
             if (!savedKeyPair) {
-              throw new Error('DappKeyPair не найден');
+              throw new Error('DappPair не найден');
             }
 
             const secretKey = bs58.decode(savedKeyPair);
-            const dappKeyPair = {
+            const dappPair = {
               secretKey,
               publicKey: secretKey.slice(32, 64), // Исправлено: публичный ключ это с 32 по 64 байт
             };
 
             const sharedSecret = nacl.box.before(
               bs58.decode(phantomEncryptionPublicKey),
-              dappKeyPair.secretKey
+              dappPair.secretKey
             );
 
             const connectData = decryptPayload(data, nonce, sharedSecret);
