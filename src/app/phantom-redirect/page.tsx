@@ -6,12 +6,11 @@ import { decryptPayload } from '@/utils/decryptPayload';
 import bs58 from 'bs58';
 import * as nacl from 'tweetnacl';
 
-
 export default function PhantomRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    const handleRedirect = async () => {
+    async function handleRedirect() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const action = urlParams.get('action');
@@ -22,7 +21,6 @@ export default function PhantomRedirect() {
           const phantomEncryptionPublicKey = urlParams.get('phantom_encryption_public_key');
 
           if (data && nonce && phantomEncryptionPublicKey) {
-            // Получаем dappKeyPair из localStorage
             const savedKeyPair = localStorage.getItem('dappKeyPair_secretKey');
             if (!savedKeyPair) {
               throw new Error('DappKeyPair не найден');
@@ -31,26 +29,22 @@ export default function PhantomRedirect() {
             const secretKey = bs58.decode(savedKeyPair);
             const dappKeyPair = {
               secretKey,
-              publicKey: secretKey.slice(0, 32),
-
+              publicKey: secretKey.slice(32, 64), // Исправлено: публичный ключ это с 32 по 64 байт
             };
 
-            // Генерируем sharedSecret
             const sharedSecret = nacl.box.before(
               bs58.decode(phantomEncryptionPublicKey),
               dappKeyPair.secretKey
             );
 
-            // Расшифровываем данные подключения
             const connectData = decryptPayload(data, nonce, sharedSecret);
 
-            // Сохраняем данные подключения
             localStorage.setItem('phantom_public_key', connectData.public_key);
             localStorage.setItem('phantom_session', connectData.session);
             localStorage.setItem('phantom_shared_secret', bs58.encode(sharedSecret));
 
-            // Возвращаемся на главную страницу
-            router.push('/');
+            console.log('Phantom connected:', connectData.public_key);
+            await router.push('/');
             return;
           }
         } else if (action === 'signAndSendTransaction') {
@@ -67,35 +61,34 @@ export default function PhantomRedirect() {
             const decrypted = decryptPayload(data, nonce, sharedSecret);
 
             if (decrypted.signature) {
-              // Сохраняем результат платежа
               sessionStorage.setItem('phantom_payment_result', JSON.stringify({
                 success: true,
                 signature: decrypted.signature,
               }));
+              console.log('Payment succeeded with signature:', decrypted.signature);
             } else {
               sessionStorage.setItem('phantom_payment_result', JSON.stringify({
                 success: false,
                 error: 'Подпись не получена',
               }));
+              console.error('Payment signature not received');
             }
 
-            // Возвращаемся на главную страницу
-            router.push('/');
+            await router.push('/');
             return;
           }
         }
 
-        // Если что-то пошло не так - возвращаемся на главную
-        router.push('/');
-      } catch (error) {
+        await router.push('/');
+      } catch (error: any) {
         console.error('Error processing redirect:', error);
         sessionStorage.setItem('phantom_payment_result', JSON.stringify({
           success: false,
           error: 'Ошибка обработки результата',
         }));
-        router.push('/');
+        await router.push('/');
       }
-    };
+    }
 
     handleRedirect();
   }, [router]);

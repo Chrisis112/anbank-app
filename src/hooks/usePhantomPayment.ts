@@ -13,17 +13,17 @@ interface PaymentParams {
   token: string;
   session?: string;
   sharedSecret?: Uint8Array;
-  dappKeyPair?: nacl.BoxKeyPair;
+  dappPair?: nacl.BoxKeyPair;
   amountOverride?: number;
 }
 
 export const usePhantomPayment = () => {
   const processPayment = useCallback(
     async (params: PaymentParams): Promise<string | null> => {
-      const { phantomWalletPublicKey, token, session, sharedSecret, dappKeyPair, amountOverride } = params;
+      const { phantomWalletPublicKey, token, session, sharedSecret, dappPair, amountOverride } = params;
 
-      const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/.test(navigator.userAgent);
-      const isMobileFlow = Boolean(session && sharedSecret && dappKeyPair);
+      const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|Pod/.test(navigator.userAgent);
+      const isMobileFlow = Boolean(session && sharedSecret && dappPair);
 
       try {
         const connection = new Connection(
@@ -47,25 +47,24 @@ export const usePhantomPayment = () => {
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        // Desktop flow — напрямую через расширение Phantom
+        // Desktop flow: sign transaction with Phantom extension
         if (!isMobile && typeof window !== 'undefined' && window.solana?.isPhantom) {
-          const signed = await window.solana.signAndSendTransaction(transaction);
-          await connection.confirmTransaction(signed.signature);
-          return signed.signature;
+          console.log('Desktop payment flow: signing with Phantom extension');
+          const signedTx = await window.solana.signAndSendTransaction(transaction);
+          await connection.confirmTransaction(signedTx.signature);
+          console.log('Transaction confirmed:', signedTx.signature);
+          return signedTx.signature;
         }
 
-        // Mobile flow — через deeplink с передачей данных
-        if (isMobileFlow && isMobile) {
-          const serialized = transaction.serialize({ requireAllSignatures: false });
-
-          const payloadObj = {
-            session,
-            transaction: bs58.encode(serialized),
-          };
-          const [nonce, encryptedPayload] = encryptPayload(payloadObj, sharedSecret!);
+        // Mobile flow: send transaction via Deeplink
+        if (isMobile && isMobileFlow) {
+          console.log('Mobile payment flow: building deeplink');
+          const serializedTx = transaction.serialize({ requireAllSignatures: false });
+          const payload = { session, transaction: bs58.encode(serializedTx) };
+          const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret!);
 
           const params = new URLSearchParams({
-            dapp_encryption_public_key: bs58.encode(dappKeyPair!.publicKey),
+            dapp_encryption_key: bs58.encode(dappPair!.publicKey),
             nonce: bs58.encode(nonce),
             redirect_link: `${window.location.origin}/phantom-redirect?action=signTransaction`,
             payload: bs58.encode(encryptedPayload),
@@ -73,16 +72,17 @@ export const usePhantomPayment = () => {
 
           const signUrl = buildUrl('signTransaction', params);
 
-          // Сохраняем пометку, что платеж ожидает подтверждения
+          // Save payment status to sessionStorage to detect after redirect
           sessionStorage.setItem('phantom_payment_pending', 'true');
           sessionStorage.setItem('phantom_payment_timestamp', Date.now().toString());
 
+          console.log('Redirecting to:', signUrl);
           window.location.href = signUrl;
 
-          return 'MOBILE_PAYMENT_REDIRECT'; // специальный маркер, что платеж инициирован на моб. устройстве
+          return 'MOBILE_PAYMENT_REDIRECT';
         }
 
-        throw new Error('Неподдерживаемая платформа для платежа');
+        throw new Error('Unsupported platform for payment');
       } catch (error) {
         toast.error('Ошибка при обработке платежа');
         console.error('Payment error:', error);
@@ -91,6 +91,7 @@ export const usePhantomPayment = () => {
     },
     []
   );
+
   const handlePaymentResult = useCallback(
     (result: any, pendingData: any, completeCallback: (data: any, signature: string) => void) => {
       if (!pendingData || !completeCallback) return;

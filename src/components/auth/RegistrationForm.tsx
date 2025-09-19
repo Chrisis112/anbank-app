@@ -12,6 +12,7 @@ import { checkUnique, registerUser, loginUser, renewSubscription } from '@/utils
 import { useUserStore } from '@/store/userStore';
 import { useAuthStore } from '@/store/authStore';
 import { PublicKey } from '@solana/web3.js';
+import { disconnect } from 'process';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -25,9 +26,8 @@ export default function RegistrationForm() {
     isConnecting,
     session,
     sharedSecret,
-    dappKeyPair,
+    dappPair,
     connectWallet,
-    disconnectWallet,
     setPhantomWalletPublicKey,
   } = PhantomWalletConnector();
 
@@ -251,10 +251,10 @@ const isMobile = typeof window !== 'undefined'
       const paymentParams = {
         phantomWalletPublicKey,
         token: localStorage.getItem('token') || '',
-        ...(isMobile && session && sharedSecret && dappKeyPair ? {
+        ...(isMobile && session && sharedSecret && dappPair ? {
           session,
           sharedSecret,
-          dappKeyPair
+          dappPair
         } : {})
       };
 
@@ -325,10 +325,10 @@ const isMobile = typeof window !== 'undefined'
       const paymentParams = {
         phantomWalletPublicKey,
         token: localStorage.getItem('token') || '',
-        ...(isMobile && session && sharedSecret && dappKeyPair ? {
+        ...(isMobile && session && sharedSecret && dappPair ? {
           session,
           sharedSecret,
-          dappKeyPair
+          dappPair
         } : {})
       };
 
@@ -393,7 +393,7 @@ const isMobile = typeof window !== 'undefined'
             )}
             {phantomWalletPublicKey && (
               <button
-                onClick={disconnectWallet}
+                onClick={disconnect}
                 className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
                 Отключить кошелек
