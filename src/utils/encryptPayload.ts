@@ -1,19 +1,17 @@
 import nacl from 'tweetnacl';
-import bs58 from 'bs58';
 
-export const encryptPayload = (
+export function encryptPayload(
   payload: any,
-  sharedSecret?: Uint8Array
-): [Uint8Array, Uint8Array] => {
-  if (!sharedSecret) throw new Error('missing shared secret');
-  
-  const nonce = nacl.randomBytes(24);
-  const payloadStr = JSON.stringify(payload);
-  const encryptedPayload = nacl.box.after(
-    Buffer.from(payloadStr, 'utf8'),
-    nonce,
-    sharedSecret
-  );
-  
-  return [nonce, encryptedPayload];
-};
+  sharedSecret: Uint8Array
+): [Uint8Array, Uint8Array] {
+  try {
+    const message = new TextEncoder().encode(JSON.stringify(payload));
+    const nonce = nacl.randomBytes(24);
+    const encrypted = nacl.box.after(message, nonce, sharedSecret);
+    
+    return [nonce, encrypted];
+  } catch (error) {
+    console.error('Encrypt error:', error);
+    throw error;
+  }
+}

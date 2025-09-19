@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { PublicKey } from '@solana/web3.js';
-import * as Linking from 'expo-linking';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { decryptPayload } from '@/utils/decryptPayload';
@@ -26,10 +25,13 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const [isConnecting, setIsConnecting] = useState(false);
   const [session, setSession] = useState<string | undefined>(undefined);
   const [sharedSecret, setSharedSecret] = useState<Uint8Array | undefined>(undefined);
-  const [deepLink, setDeepLink] = useState<string>('');
   const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair | null>(null);
 
-  // Инициализация dappKeyPair один раз
+  const isMobile = typeof window !== 'undefined' 
+    ? /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    : false;
+
+  // Инициализация dappKeyPair
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -53,65 +55,46 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     }
   }, []);
 
-  // Восстановление публичного ключа, сессии и sharedSecret из localStorage при монтировании
-useEffect(() => {
-  if (typeof window === 'undefined') return;
+  // Восстановление из localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
 
-  const storedPubKey = localStorage.getItem('phantom_public_key');
-  const storedSession = localStorage.getItem('phantom_session');
-  const storedSecret = localStorage.getItem('phantom_shared_secret');
+    const storedPubKey = localStorage.getItem('phantom_public_key');
+    const storedSession = localStorage.getItem('phantom_session');
+    const storedSecret = localStorage.getItem('phantom_shared_secret');
 
-  if (storedPubKey) {
-    try {
-      setPhantomWalletPublicKey(new PublicKey(storedPubKey));
-    } catch {
-      localStorage.removeItem('phantom_public_key');
-      setPhantomWalletPublicKey(null);
+    if (storedPubKey) {
+      try {
+        setPhantomWalletPublicKey(new PublicKey(storedPubKey));
+      } catch {
+        localStorage.removeItem('phantom_public_key');
+      }
     }
-  }
-  if (storedSession) setSession(storedSession);
-  if (storedSecret) setSharedSecret(bs58.decode(storedSecret));
-}, []);
-
-  const onConnectRedirectLink = Linking.createURL('onConnect');
-  const onDisconnectRedirectLink = Linking.createURL('onDisconnect');
-
-  const handleDeepLink = useCallback(({ url }: { url: string }) => {
-    setDeepLink(url);
+    if (storedSession) setSession(storedSession);
+    if (storedSecret) setSharedSecret(bs58.decode(storedSecret));
   }, []);
 
+  // Обработка deeplinks для мобильных устройств
   useEffect(() => {
-    const initializeDeeplinks = async () => {
-      const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) setDeepLink(initialUrl);
+    if (!isMobile || typeof window === 'undefined') return;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PHANTOM_DEEPLINK') {
+        handleDeepLink(event.data.url);
+      }
     };
-    initializeDeeplinks();
 
-    const subscription = Linking.addEventListener('url', handleDeepLink);
-    return () => subscription?.remove();
-  }, [handleDeepLink]);
-useEffect(() => {
-  // Функция-обработчик, поскольку useEffect не может принимать async напрямую,
-  // делаем внутри async функцию и вызываем её
-  const connectAndProcessDeepLink = async () => {
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [dappKeyPair, isMobile]);
+
+  const handleDeepLink = useCallback(async (url: string) => {
+    if (!dappKeyPair) return;
+
     try {
-      // Подключаемся к Phantom (если пользователь ещё не подключён)
-      const resp = await window.solana.connect();
-      const pubKeyStr = resp.publicKey.toString();
+      const urlObj = new URL(url);
+      const params = new URLSearchParams(urlObj.search);
 
-      // Устанавливаем публичный ключ в состояние (в вашем случае - React state)
-      setPhantomWalletPublicKey(new PublicKey(pubKeyStr));
-      // Сохраняем публичный ключ в localStorage для восстановления после обновления страницы
-      localStorage.setItem('phantom_public_key', pubKeyStr);
-
-      // Если нет deeplink или dappKeyPair - дальше не обрабатываем
-      if (!deepLink || !dappKeyPair) return;
-
-      // Разбираем URL из deeplink
-      const url = new URL(deepLink);
-      const params = url.searchParams;
-
-      // Если пришла ошибка от Phantom - выводим и останавливаем подключение
       if (params.get('errorCode')) {
         const error = Object.fromEntries([...params]);
         const message = error?.errorMessage ?? 'Unknown error';
@@ -120,103 +103,81 @@ useEffect(() => {
         return;
       }
 
-      // Обработка успешного подключения (берем данные из deeplink)
-      if (/onConnect/.test(url.pathname)) {
-        // Вычисляем общий секрет шифрования
+      if (urlObj.pathname.includes('onConnect')) {
         const sharedSecretDapp = nacl.box.before(
           bs58.decode(params.get('phantom_encryption_public_key')!),
           dappKeyPair.secretKey
         );
 
-        // Расшифровываем данные из deeplink
         const connectData = decryptPayload(
           params.get('data')!,
           params.get('nonce')!,
           sharedSecretDapp
         );
 
-        // Устанавливаем полученные данные в состояние
         setSharedSecret(sharedSecretDapp);
         setSession(connectData.session);
-
-        // Сохраняем публичный ключ пользователя, который пришел в connectData (на всякий случай)
         setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
-        localStorage.setItem('phantom_public_key', connectData.public_key);
 
-        // Сохраняем прочие данные для восстановления
+        localStorage.setItem('phantom_public_key', connectData.public_key);
         localStorage.setItem('phantom_session', connectData.session);
         localStorage.setItem('phantom_shared_secret', bs58.encode(sharedSecretDapp));
 
         console.log(`Connected to Phantom: ${connectData.public_key}`);
-
-        return;
+        setIsConnecting(false);
       }
 
-      // Обработка отключения кошелька
-      if (/onDisconnect/.test(url.pathname)) {
-        setPhantomWalletPublicKey(null);
-        setSession(undefined);
-        setSharedSecret(undefined);
-
-        localStorage.removeItem('phantom_public_key');
-        localStorage.removeItem('phantom_session');
-        localStorage.removeItem('phantom_shared_secret');
-
-        console.log('Disconnected from Phantom');
-        return;
+      if (urlObj.pathname.includes('onDisconnect')) {
+        disconnectWallet();
       }
     } catch (error) {
-      console.error('Error processing deeplink or connecting to Phantom:', error);
+      console.error('Error processing deeplink:', error);
       setIsConnecting(false);
     }
-  };
-
-  connectAndProcessDeepLink();
-}, [deepLink, dappKeyPair]);
+  }, [dappKeyPair]);
 
   const connectWallet = useCallback(async () => {
-    try {
-      setIsConnecting(true);
+  try {
+    setIsConnecting(true);
 
-      if (typeof window !== 'undefined' && window.solana?.isPhantom) {
-        const resp = await window.solana.connect();
-        setPhantomWalletPublicKey(new PublicKey(resp.publicKey.toString()));
-        localStorage.setItem('phantom_public_key', resp.publicKey.toString());
+    const isMobile = typeof window !== 'undefined'
+      ? /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      : false;
 
-        if (!dappKeyPair) {
-          const savedKey = localStorage.getItem('dappKeyPair_secretKey');
-          let newDappKeyPair: nacl.BoxKeyPair;
-          if (savedKey) {
-            const secretKey = bs58.decode(savedKey);
-            newDappKeyPair = {
-              publicKey: secretKey.slice(0, 32),
-              secretKey,
-            };
-          } else {
-            newDappKeyPair = nacl.box.keyPair();
-            localStorage.setItem('dappKeyPair_secretKey', bs58.encode(newDappKeyPair.secretKey));
-          }
-          setDappKeyPair(newDappKeyPair);
-        }
-
-        setIsConnecting(false);
-      } else {
-        if (!dappKeyPair) throw new Error('dappKeyPair не инициализирован');
-
-        const params = new URLSearchParams({
-          dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-          cluster: 'mainnet-beta',
-          app_url: 'https://app.anbanktoken.com',
-          redirect_link: onConnectRedirectLink,
-        });
-        const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
-        await Linking.openURL(connectUrl);
-      }
-    } catch (error) {
-      console.error('Error connecting to Phantom:', error);
+    if (!isMobile && typeof window !== 'undefined' && window.solana?.isPhantom) {
+      // Десктоп — вызываем connect расширения Phantom
+      const resp = await window.solana.connect();
+      setPhantomWalletPublicKey(new PublicKey(resp.publicKey.toString()));
+      localStorage.setItem('phantom_public_key', resp.publicKey.toString());
       setIsConnecting(false);
+      return;
     }
-  }, [dappKeyPair, onConnectRedirectLink]);
+
+    if (isMobile && dappKeyPair) {
+      // Мобильные устройства — open deeplink для подключения
+      const params = new URLSearchParams({
+        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+        cluster: 'mainnet-beta',
+        app_url: window.location.origin,
+        redirect_link: `${window.location.origin}/phantom-redirect?action=connect`,
+      });
+
+      const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
+
+      window.open(connectUrl, '_blank');
+      
+      // Здесь поставьте setTimeout или другую логику если нужно управлять состоянием
+      setIsConnecting(false);
+      return;
+    }
+
+    throw new Error('Phantom Wallet не доступен');
+
+  } catch (error) {
+    console.error('Error connecting to Phantom:', error);
+    setIsConnecting(false);
+  }
+}, [dappKeyPair]);
 
   const disconnectWallet = useCallback(() => {
     setPhantomWalletPublicKey(null);
