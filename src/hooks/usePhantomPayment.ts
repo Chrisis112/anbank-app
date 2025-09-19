@@ -5,7 +5,6 @@ import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } f
 import bs58 from 'bs58';
 import * as nacl from 'tweetnacl';
 import { encryptPayload } from '@/utils/encryptPayload';
-import { buildUrl } from '@/utils/buildUrl';
 import { toast } from 'react-toastify';
 
 interface PaymentParams {
@@ -13,17 +12,17 @@ interface PaymentParams {
   token: string;
   session?: string;
   sharedSecret?: Uint8Array;
-  dappPair?: nacl.BoxKeyPair;
+  dappKeyPair?: nacl.BoxKeyPair;
   amountOverride?: number;
 }
 
 export const usePhantomPayment = () => {
   const processPayment = useCallback(
     async (params: PaymentParams): Promise<string | null> => {
-      const { phantomWalletPublicKey, token, session, sharedSecret, dappPair, amountOverride } = params;
+      const { phantomWalletPublicKey, token, session, sharedSecret, dappKeyPair, amountOverride } = params;
 
-      const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|Pod/.test(navigator.userAgent);
-      const isMobileFlow = Boolean(session && sharedSecret && dappPair);
+      const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const isMobileFlow = Boolean(session && sharedSecret && dappKeyPair);
 
       try {
         const connection = new Connection(
@@ -31,7 +30,6 @@ export const usePhantomPayment = () => {
         );
 
         const receiver = new PublicKey(process.env.NEXT_PUBLIC_RECEIVER_WALLET || '');
-
         const amount = amountOverride ?? parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.001');
         const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
 
@@ -47,45 +45,43 @@ export const usePhantomPayment = () => {
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        // Desktop flow: sign transaction with Phantom extension
+        // Desktop flow
         if (!isMobile && typeof window !== 'undefined' && window.solana?.isPhantom) {
-          console.log('Desktop payment flow: signing with Phantom extension');
+          console.log('Desktop payment: signing with Phantom extension');
           const signedTx = await window.solana.signAndSendTransaction(transaction);
           await connection.confirmTransaction(signedTx.signature);
           console.log('Transaction confirmed:', signedTx.signature);
           return signedTx.signature;
         }
 
-        // Mobile flow: send transaction via Deeplink
+        // Mobile flow
         if (isMobile && isMobileFlow) {
-          console.log('Mobile payment flow: building deeplink');
+          console.log('Mobile payment: building deeplink');
           const serializedTx = transaction.serialize({ requireAllSignatures: false });
           const payload = { session, transaction: bs58.encode(serializedTx) };
           const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret!);
 
           const params = new URLSearchParams({
-            dapp_encryption_key: bs58.encode(dappPair!.publicKey),
+            dapp_encryption_public_key: bs58.encode(dappKeyPair!.publicKey),
             nonce: bs58.encode(nonce),
-            redirect_link: `${window.location.origin}/phantom-redirect?action=signTransaction`,
+            redirect_link: `${window.location.origin}/phantom-redirect?action=signAndSendTransaction`,
             payload: bs58.encode(encryptedPayload),
           });
 
-          const signUrl = buildUrl('signTransaction', params);
+          const signUrl = `https://phantom.app/ul/v1/signAndSendTransaction?${params.toString()}`;
+          console.log('Redirecting to payment URL:', signUrl);
 
-          // Save payment status to sessionStorage to detect after redirect
           sessionStorage.setItem('phantom_payment_pending', 'true');
           sessionStorage.setItem('phantom_payment_timestamp', Date.now().toString());
 
-          console.log('Redirecting to:', signUrl);
           window.location.href = signUrl;
-
           return 'MOBILE_PAYMENT_REDIRECT';
         }
 
-        throw new Error('Unsupported platform for payment');
+        throw new Error('Неподдерживаемая платформа для платежа');
       } catch (error) {
-        toast.error('Ошибка при обработке платежа');
         console.error('Payment error:', error);
+        toast.error('Ошибка при обработке платежа');
         throw error;
       }
     },
@@ -97,7 +93,7 @@ export const usePhantomPayment = () => {
       if (!pendingData || !completeCallback) return;
 
       if (result?.success && result.signature) {
-        toast.success('Платеж успешно подтверждён');
+        toast.success('Платеж успешно подтвержден');
         completeCallback(pendingData, result.signature);
       } else {
         toast.error('Ошибка при обработке платежа');
