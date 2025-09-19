@@ -17,7 +17,7 @@ function getDappPair(): nacl.BoxKeyPair | null {
     if (!encodedSecretKey) return null;
     const secretKey = bs58.decode(encodedSecretKey);
     const keyPair = {
-      publicKey: secretKey.slice(32),
+      publicKey: secretKey.slice(32,64),
       secretKey,
     };
     return keyPair;
@@ -81,7 +81,7 @@ export default function OnConnectClient() {
         toast.success('Phantom Wallet успешно подключен!');
 
         setDappPair({
-  publicKey: dappSecret.slice(0, 32),
+  publicKey: dappSecret.slice(32, 64),
   secretKey: dappSecret,
 });
 

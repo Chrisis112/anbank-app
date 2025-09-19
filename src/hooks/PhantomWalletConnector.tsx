@@ -40,7 +40,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         const secretKey = bs58.decode(saved);
         setDappPair({
           secretKey,
-          publicKey: secretKey.slice(32), // исправлено на правильный срез публичного ключа (32-64)
+          publicKey: secretKey.slice(32,64),// исправлено на правильный срез публичного ключа (32-64)
         });
         console.log('Restored dappPair from localStorage');
       } else {
