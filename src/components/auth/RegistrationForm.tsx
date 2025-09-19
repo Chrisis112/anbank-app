@@ -86,9 +86,9 @@ useEffect(() => {
 
   // Обработка deeplinks только на мобильных устройствах
   useEffect(() => {
-    const isMobile = typeof window !== 'undefined' 
-      ? /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-      : false;
+const isMobile = typeof window !== 'undefined'
+  ? /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  : false;
 
     if (!isMobile) return;
 
