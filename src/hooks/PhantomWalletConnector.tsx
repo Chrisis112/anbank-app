@@ -144,7 +144,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         console.log('Starting Phantom mobile deeplink flow');
         const params = new URLSearchParams({
           dapp_encryption_public_key: bs58.encode(dappPair.publicKey),
-          cluster: 'devnet', // замените на 'mainnet' в продакшене
+          cluster: 'mainnet',
           app_url: window.location.origin,
           redirect_link: `${window.location.origin}/phantom-redirect?action=connect`,
         });
