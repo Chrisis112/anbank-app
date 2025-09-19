@@ -3,7 +3,7 @@
 import { useCallback } from 'react';
 import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import bs58 from 'bs58';
-import nacl from 'tweetnacl';
+import * as nacl from 'tweetnacl';
 import { encryptPayload } from '@/utils/encryptPayload';
 import { buildUrl } from '@/utils/buildUrl';
 import { toast } from 'react-toastify';
@@ -22,10 +22,7 @@ export const usePhantomPayment = () => {
     async (params: PaymentParams): Promise<string | null> => {
       const { phantomWalletPublicKey, token, session, sharedSecret, dappKeyPair, amountOverride } = params;
 
-      const isMobile = typeof window !== 'undefined'
-        ? /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-        : false;
-
+      const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/.test(navigator.userAgent);
       const isMobileFlow = Boolean(session && sharedSecret && dappKeyPair);
 
       try {
@@ -33,9 +30,7 @@ export const usePhantomPayment = () => {
           process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com'
         );
 
-        const receiverWallet = new PublicKey(
-          process.env.NEXT_PUBLIC_RECEIVER_WALLET || ''
-        );
+        const receiver = new PublicKey(process.env.NEXT_PUBLIC_RECEIVER_WALLET || '');
 
         const amount = amountOverride ?? parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.001');
         const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
@@ -43,7 +38,7 @@ export const usePhantomPayment = () => {
         const transaction = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: phantomWalletPublicKey,
-            toPubkey: receiverWallet,
+            toPubkey: receiver,
             lamports,
           })
         );
@@ -52,59 +47,56 @@ export const usePhantomPayment = () => {
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        // Desktop flow: прямое подписание через window.solana
+        // Desktop flow — напрямую через расширение Phantom
         if (!isMobile && typeof window !== 'undefined' && window.solana?.isPhantom) {
-          const signedTransaction = await window.solana.signAndSendTransaction(transaction);
-          await connection.confirmTransaction(signedTransaction.signature);
-          return signedTransaction.signature;
+          const signed = await window.solana.signAndSendTransaction(transaction);
+          await connection.confirmTransaction(signed.signature);
+          return signed.signature;
         }
 
-        // Mobile flow: через deeplinks
-        if (isMobile && isMobileFlow) {
-          const serializedTransaction = transaction.serialize({ requireAllSignatures: false });
+        // Mobile flow — через deeplink с передачей данных
+        if (isMobileFlow && isMobile) {
+          const serialized = transaction.serialize({ requireAllSignatures: false });
 
-          const payload = {
+          const payloadObj = {
             session,
-            transaction: bs58.encode(serializedTransaction),
+            transaction: bs58.encode(serialized),
           };
+          const [nonce, encryptedPayload] = encryptPayload(payloadObj, sharedSecret!);
 
-          const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret!);
-
-          const urlParams = new URLSearchParams({
+          const params = new URLSearchParams({
             dapp_encryption_public_key: bs58.encode(dappKeyPair!.publicKey),
             nonce: bs58.encode(nonce),
-            redirect_link: `${window.location.origin}/phantom-redirect?action=signAndSendTransaction`,
+            redirect_link: `${window.location.origin}/phantom-redirect?action=signTransaction`,
             payload: bs58.encode(encryptedPayload),
           });
 
-          const signUrl = buildUrl('signAndSendTransaction', urlParams);
+          const signUrl = buildUrl('signTransaction', params);
 
-          // Сохраняем состояние перед переходом
+          // Сохраняем пометку, что платеж ожидает подтверждения
           sessionStorage.setItem('phantom_payment_pending', 'true');
           sessionStorage.setItem('phantom_payment_timestamp', Date.now().toString());
-          
-          // На мобильных используем location.href
+
           window.location.href = signUrl;
 
-          // Возвращаем специальное значение для мобильных
-          return 'MOBILE_PAYMENT_REDIRECT';
+          return 'MOBILE_PAYMENT_REDIRECT'; // специальный маркер, что платеж инициирован на моб. устройстве
         }
 
         throw new Error('Неподдерживаемая платформа для платежа');
       } catch (error) {
+        toast.error('Ошибка при обработке платежа');
         console.error('Payment error:', error);
         throw error;
       }
     },
     []
   );
-
   const handlePaymentResult = useCallback(
     (result: any, pendingData: any, completeCallback: (data: any, signature: string) => void) => {
       if (!pendingData || !completeCallback) return;
 
-      if (result.success && result.signature) {
-        toast.success('Платеж успешно обработан!');
+      if (result?.success && result.signature) {
+        toast.success('Платеж успешно подтверждён');
         completeCallback(pendingData, result.signature);
       } else {
         toast.error('Ошибка при обработке платежа');
