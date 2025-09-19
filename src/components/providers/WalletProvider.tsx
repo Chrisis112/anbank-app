@@ -46,12 +46,10 @@ class SimpleAuthorizationResultCache implements AuthorizationResultCache {
 interface Props {
   children: ReactNode;
 }
-export const WalletContextProvider: FC<Props> = ({ children }) => {
-  // Используем строго RPC из .env
-  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK!; // падает с ошибкой, если не задана
 
-  // Жёстко задаём кластер mainnet-beta, тк ваш endpoint – mainnet
-  const cluster = 'mainnet-beta';
+export const WalletContextProvider: FC<Props> = ({ children }) => {
+  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
+  const isDevnet = rpcUrl.includes('devnet');
 
   const mobileWalletAdapter = useMemo(() => new SolanaMobileWalletAdapter({
     appIdentity: {
@@ -60,11 +58,11 @@ export const WalletContextProvider: FC<Props> = ({ children }) => {
     },
     authorizationResultCache: new SimpleAuthorizationResultCache(),
     addressSelector: createDefaultAddressSelector(),
-    cluster,  // Используем фиксированный кластер
+    cluster: isDevnet ? 'devnet' : 'mainnet-beta',
     onWalletNotFound: async (_adapter) => {
       alert('Solana Mobile Wallet не найден! Пожалуйста, установите соответствующее мобильное приложение.');
     },
-  }), []);
+  }), [rpcUrl]);
 
   const wallets = useMemo(() => [
     new PhantomWalletAdapter(),

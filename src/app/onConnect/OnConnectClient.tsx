@@ -11,6 +11,20 @@ import { PublicKey } from '@solana/web3.js';
 
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || "0.36");
 
+function getDappKeyPair(): nacl.BoxKeyPair | null {
+  try {
+    const encodedSecretKey = localStorage.getItem('dappKeyPair_secretKey');
+    if (!encodedSecretKey) return null;
+    const secretKey = bs58.decode(encodedSecretKey);
+    const keyPair = {
+      publicKey: secretKey.slice(32),
+      secretKey,
+    };
+    return keyPair;
+  } catch {
+    return null;
+  }
+}
 
 export default function OnConnectClient() {
   const router = useRouter();
@@ -41,7 +55,7 @@ export default function OnConnectClient() {
 
     if (phantom_encryption_public_key && nonce && data) {
       try {
-        const encodedDappSecretKey = localStorage.getItem('dappPair_secretKey');
+        const encodedDappSecretKey = localStorage.getItem('dappKeyPair_secretKey');
         if (!encodedDappSecretKey) throw new Error('Нет локального ключа приложения для дешифровки данных');
         const dappSecret = bs58.decode(encodedDappSecretKey);
 
@@ -67,7 +81,7 @@ export default function OnConnectClient() {
         toast.success('Phantom Wallet успешно подключен!');
 
         setDappKeyPair({
-  publicKey: dappSecret.slice(32, 64),
+  publicKey: dappSecret.slice(0, 32),
   secretKey: dappSecret,
 });
 
