@@ -15,7 +15,7 @@ interface PhantomWalletConnectorReturn {
   setSession: (session: string | undefined) => void;
   sharedSecret: Uint8Array | undefined;
   setSharedSecret: (secret: Uint8Array | undefined) => void;
-  dappPair: nacl.BoxKeyPair | null;
+  dappKeyPair: nacl.BoxKeyPair | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
 }
@@ -25,7 +25,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
   const [isConnecting, setIsConnecting] = useState(false);
   const [session, setSession] = useState<string|undefined>(undefined);
   const [sharedSecret, setSharedSecret] = useState<Uint8Array|undefined>(undefined);
-  const [dappPair, setDappPair] = useState<nacl.BoxKeyPair|null>(null);
+  const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair|null>(null);
 
   const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
@@ -38,7 +38,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     if (saved) {
       try {
         const secretKey = bs58.decode(saved);
-        setDappPair({
+        setDappKeyPair({
           secretKey,
           publicKey: secretKey.slice(0, 32),       // публичный ключ — первые 32 байта
         });
@@ -46,12 +46,12 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         // если повреждено — сгенерировать заново
         const newPair = nacl.box.keyPair();
         localStorage.setItem('dapp_PublicKeySecret', bs58.encode(newPair.secretKey));
-        setDappPair(newPair);
+        setDappKeyPair(newPair);
       }
     } else {
       const newPair = nacl.box.keyPair();
       localStorage.setItem('dapp_PublicKeySecret', bs58.encode(newPair.secretKey));
-      setDappPair(newPair);
+      setDappKeyPair(newPair);
     }
   }, []);
 
@@ -126,10 +126,10 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         return;
       }
 
-      if (isMobile && dappPair) {
+      if (isMobile && dappKeyPair) {
         // mobile: deeplink к приложению Phantom Wallet
         const params = new URLSearchParams({
-          dapp_encryption_public_key: bs58.encode(dappPair.publicKey),
+          dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
           cluster: 'mainnet-beta',
           app_url: window.location.origin,
           redirect_link: `${window.location.origin}/phantom-redirect?action=connect`,
@@ -147,7 +147,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
       console.error(e);
       setIsConnecting(false);
     }
-  }, [dappPair, isMobile]);
+  }, [dappKeyPair, isMobile]);
 
   const disconnectWallet = useCallback(() => {
     setPhantomWalletPublicKey(null);
@@ -165,10 +165,11 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
     isConnecting,
     setPhantomWalletPublicKey,
     session,
+
     setSession,
     sharedSecret,
     setSharedSecret,
-    dappPair,
+    dappKeyPair,
     connectWallet,
     disconnectWallet,
   };
