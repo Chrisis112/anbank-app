@@ -52,14 +52,14 @@ export const usePhantomPayment = () => {
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
 
-        // Desktop flow: direct sign and send transaction
+        // Desktop flow: прямое подписание через window.solana
         if (!isMobile && typeof window !== 'undefined' && window.solana?.isPhantom) {
           const signedTransaction = await window.solana.signAndSendTransaction(transaction);
           await connection.confirmTransaction(signedTransaction.signature);
           return signedTransaction.signature;
         }
 
-        // Mobile flow: deeplink flow with all needed parameters
+        // Mobile flow: через deeplinks
         if (isMobile && isMobileFlow) {
           const serializedTransaction = transaction.serialize({ requireAllSignatures: false });
 
@@ -79,31 +79,15 @@ export const usePhantomPayment = () => {
 
           const signUrl = buildUrl('signAndSendTransaction', urlParams);
 
-          const phantomWindow = window.open(signUrl, '_blank');
+          // Сохраняем состояние перед переходом
+          sessionStorage.setItem('phantom_payment_pending', 'true');
+          sessionStorage.setItem('phantom_payment_timestamp', Date.now().toString());
+          
+          // На мобильных используем location.href
+          window.location.href = signUrl;
 
-          return new Promise((resolve, reject) => {
-            const messageHandler = (event: MessageEvent) => {
-              if (event.origin !== window.location.origin) return;
-
-              if (event.data?.type === 'PHANTOM_PAYMENT_RESULT') {
-                window.removeEventListener('message', messageHandler);
-                if (phantomWindow) phantomWindow.close();
-
-                if (event.data.success) {
-                  resolve(event.data.signature);
-                } else {
-                  reject(new Error(event.data.error || 'Payment failed'));
-                }
-              }
-            };
-
-            window.addEventListener('message', messageHandler);
-
-            setTimeout(() => {
-              window.removeEventListener('message', messageHandler);
-              reject(new Error('Payment timeout'));
-            }, 300000);
-          });
+          // Возвращаем специальное значение для мобильных
+          return 'MOBILE_PAYMENT_REDIRECT';
         }
 
         throw new Error('Неподдерживаемая платформа для платежа');

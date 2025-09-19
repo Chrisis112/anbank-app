@@ -60,6 +60,30 @@ export default function RegistrationForm() {
     }
   }, [setPhantomWalletPublicKey]);
 
+
+  // Проверка результата мобильного платежа при возврате
+useEffect(() => {
+  const paymentResult = sessionStorage.getItem('phantom_payment_result');
+  if (paymentResult && pendingRegistrationData) {
+    try {
+      const result = JSON.parse(paymentResult);
+      sessionStorage.removeItem('phantom_payment_result');
+      
+      if (result.success && result.signature) {
+        completeRegistration(pendingRegistrationData, result.signature);
+      } else {
+        toast.error('Ошибка платежа: ' + (result.error || 'Неизвестная ошибка'));
+        setRegisterLoading(false);
+        setPendingRegistrationData(null);
+      }
+    } catch (error) {
+      console.error('Error parsing payment result:', error);
+      setRegisterLoading(false);
+      setPendingRegistrationData(null);
+    }
+  }
+}, [pendingRegistrationData]);
+
   // Обработка deeplinks только на мобильных устройствах
   useEffect(() => {
     const isMobile = typeof window !== 'undefined' 

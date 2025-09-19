@@ -41,7 +41,7 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         const secretKey = bs58.decode(saved);
         setDappKeyPair({
           secretKey,
-          publicKey: secretKey.slice(0, 32),
+          publicKey: secretKey.slice(32, 64), // Исправлено: правильная длина публичного ключа
         });
       } else {
         const newKeyPair = nacl.box.keyPair();
@@ -71,113 +71,83 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
       }
     }
     if (storedSession) setSession(storedSession);
-    if (storedSecret) setSharedSecret(bs58.decode(storedSecret));
+    if (storedSecret) {
+      try {
+        setSharedSecret(bs58.decode(storedSecret)); // Исправлено: правильное декодирование
+      } catch {
+        localStorage.removeItem('phantom_shared_secret');
+      }
+    }
   }, []);
 
-  // Обработка deeplinks для мобильных устройств
+  // Обработка возврата из Phantom (для мобильных)
   useEffect(() => {
     if (!isMobile || typeof window === 'undefined') return;
 
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'PHANTOM_DEEPLINK') {
-        handleDeepLink(event.data.url);
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isConnecting) {
+        // Пользователь вернулся в приложение - проверяем результат подключения
+        setTimeout(() => {
+          const storedPubKey = localStorage.getItem('phantom_public_key');
+          const storedSession = localStorage.getItem('phantom_session');
+          
+          if (storedPubKey && storedSession) {
+            try {
+              setPhantomWalletPublicKey(new PublicKey(storedPubKey));
+              setSession(storedSession);
+              setIsConnecting(false);
+            } catch {
+              setIsConnecting(false);
+            }
+          } else {
+            // Если данных нет - отменяем подключение
+            setTimeout(() => setIsConnecting(false), 2000);
+          }
+        }, 1000);
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [dappKeyPair, isMobile]);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isMobile, isConnecting]);
 
-  const handleDeepLink = useCallback(async (url: string) => {
-    if (!dappKeyPair) return;
-
+  const connectWallet = useCallback(async () => {
     try {
-      const urlObj = new URL(url);
-      const params = new URLSearchParams(urlObj.search);
+      setIsConnecting(true);
 
-      if (params.get('errorCode')) {
-        const error = Object.fromEntries([...params]);
-        const message = error?.errorMessage ?? 'Unknown error';
-        console.error('Phantom error:', message);
+      // Desktop: используем window.solana
+      if (!isMobile && typeof window !== 'undefined' && window.solana?.isPhantom) {
+        const resp = await window.solana.connect();
+        setPhantomWalletPublicKey(new PublicKey(resp.publicKey.toString()));
+        localStorage.setItem('phantom_public_key', resp.publicKey.toString());
         setIsConnecting(false);
         return;
       }
 
-      if (urlObj.pathname.includes('onConnect')) {
-        const sharedSecretDapp = nacl.box.before(
-          bs58.decode(params.get('phantom_encryption_public_key')!),
-          dappKeyPair.secretKey
-        );
+      // Mobile: используем deeplinks
+      if (isMobile && dappKeyPair) {
+        const params = new URLSearchParams({
+          dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+          cluster: 'mainnet-beta',
+          app_url: window.location.origin,
+          redirect_link: `${window.location.origin}/phantom-redirect?action=connect`,
+        });
 
-        const connectData = decryptPayload(
-          params.get('data')!,
-          params.get('nonce')!,
-          sharedSecretDapp
-        );
-
-        setSharedSecret(sharedSecretDapp);
-        setSession(connectData.session);
-        setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
-
-        localStorage.setItem('phantom_public_key', connectData.public_key);
-        localStorage.setItem('phantom_session', connectData.session);
-        localStorage.setItem('phantom_shared_secret', bs58.encode(sharedSecretDapp));
-
-        console.log(`Connected to Phantom: ${connectData.public_key}`);
-        setIsConnecting(false);
+        const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
+        
+        // На мобильных используем location.href вместо window.open
+        window.location.href = connectUrl;
+        
+        // isConnecting остается true - будет сброшен в handleVisibilityChange
+        return;
       }
 
-      if (urlObj.pathname.includes('onDisconnect')) {
-        disconnectWallet();
-      }
+      throw new Error('Phantom Wallet не доступен');
     } catch (error) {
-      console.error('Error processing deeplink:', error);
+      console.error('Error connecting to Phantom:', error);
       setIsConnecting(false);
     }
-  }, [dappKeyPair]);
-
-  const connectWallet = useCallback(async () => {
-  try {
-    setIsConnecting(true);
-
-    const isMobile = typeof window !== 'undefined'
-      ? /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-      : false;
-
-    if (!isMobile && typeof window !== 'undefined' && window.solana?.isPhantom) {
-      // Десктоп — вызываем connect расширения Phantom
-      const resp = await window.solana.connect();
-      setPhantomWalletPublicKey(new PublicKey(resp.publicKey.toString()));
-      localStorage.setItem('phantom_public_key', resp.publicKey.toString());
-      setIsConnecting(false);
-      return;
-    }
-
-    if (isMobile && dappKeyPair) {
-      // Мобильные устройства — open deeplink для подключения
-      const params = new URLSearchParams({
-        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-        cluster: 'mainnet-beta',
-        app_url: window.location.origin,
-        redirect_link: `${window.location.origin}/phantom-redirect?action=connect`,
-      });
-
-      const connectUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
-
-      window.open(connectUrl, '_blank');
-      
-      // Здесь поставьте setTimeout или другую логику если нужно управлять состоянием
-      setIsConnecting(false);
-      return;
-    }
-
-    throw new Error('Phantom Wallet не доступен');
-
-  } catch (error) {
-    console.error('Error connecting to Phantom:', error);
-    setIsConnecting(false);
-  }
-}, [dappKeyPair]);
+  }, [dappKeyPair, isMobile]);
 
   const disconnectWallet = useCallback(() => {
     setPhantomWalletPublicKey(null);
