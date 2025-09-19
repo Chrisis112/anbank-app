@@ -41,7 +41,8 @@ export default function PhantomWalletConnector(): PhantomWalletConnectorReturn {
         const secretKey = bs58.decode(saved);
         setDappKeyPair({
           secretKey,
-          publicKey: secretKey.slice(32, 64), // Исправлено: правильная длина публичного ключа
+          publicKey: secretKey.slice(0, 32),
+ // Исправлено: правильная длина публичного ключа
         });
       } else {
         const newKeyPair = nacl.box.keyPair();

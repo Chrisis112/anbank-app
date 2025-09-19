@@ -31,7 +31,8 @@ export default function PhantomRedirect() {
             const secretKey = bs58.decode(savedKeyPair);
             const dappKeyPair = {
               secretKey,
-              publicKey: secretKey.slice(32, 64),
+              publicKey: secretKey.slice(0, 32),
+
             };
 
             // Генерируем sharedSecret
