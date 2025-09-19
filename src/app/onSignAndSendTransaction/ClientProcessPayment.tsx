@@ -19,7 +19,7 @@ export default function ClientProcessPayment() {
         const encodedNonce = searchParams.get('nonce');
         if (!encodedPayload || !encodedNonce) throw new Error('Отсутствуют необходимые параметры');
 
-        const encodedSecretKey = localStorage.getItem('dappKeyPair_secretKey');
+        const encodedSecretKey = localStorage.getItem('dappPair_secretKey');
         if (!encodedSecretKey) throw new Error('Ключ приложения не найден');
 
         const encodedSharedSecretBase58 = localStorage.getItem('phantom_shared_secret');

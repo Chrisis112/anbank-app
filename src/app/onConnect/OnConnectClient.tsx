@@ -11,9 +11,9 @@ import { PublicKey } from '@solana/web3.js';
 
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || "0.36");
 
-function getDappKeyPair(): nacl.BoxKeyPair | null {
+function getDappPair(): nacl.BoxKeyPair | null {
   try {
-    const encodedSecretKey = localStorage.getItem('dappKeyPair_secretKey');
+    const encodedSecretKey = localStorage.getItem('dappPair_secretKey');
     if (!encodedSecretKey) return null;
     const secretKey = bs58.decode(encodedSecretKey);
     const keyPair = {
@@ -36,7 +36,7 @@ export default function OnConnectClient() {
   const [session, setSession] = useState<string | undefined>();
   const [readyForPayment, setReadyForPayment] = useState(false);
   const [paymentInProgress, setPaymentInProgress] = useState(false);
-  const [dappKeyPair, setDappKeyPair] = useState<nacl.BoxKeyPair | null>(null);
+  const [dappPair, setDappPair] = useState<nacl.BoxKeyPair | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -55,7 +55,7 @@ export default function OnConnectClient() {
 
     if (phantom_encryption_public_key && nonce && data) {
       try {
-        const encodedDappSecretKey = localStorage.getItem('dappKeyPair_secretKey');
+        const encodedDappSecretKey = localStorage.getItem('dappPair_secretKey');
         if (!encodedDappSecretKey) throw new Error('Нет локального ключа приложения для дешифровки данных');
         const dappSecret = bs58.decode(encodedDappSecretKey);
 
@@ -80,7 +80,7 @@ export default function OnConnectClient() {
 
         toast.success('Phantom Wallet успешно подключен!');
 
-        setDappKeyPair({
+        setDappPair({
   publicKey: dappSecret.slice(0, 32),
   secretKey: dappSecret,
 });
@@ -94,7 +94,7 @@ export default function OnConnectClient() {
   }, [router, searchParams]);
 
   const handleStartPayment = async () => {
-    if (!phantomWalletPublicKey || !session || !sharedSecret || !dappKeyPair) {
+    if (!phantomWalletPublicKey || !session || !sharedSecret || !dappPair) {
       toast.error('Отсутствуют данные для оплаты');
       return;
     }
@@ -104,7 +104,7 @@ const paymentResult = await processPayment({
   phantomWalletPublicKey,
   session,
   sharedSecret,
-  dappKeyPair,
+  dappPair,
   amountOverride: SOL_AMOUNT,
   token: localStorage.getItem('token') || '',
 });
