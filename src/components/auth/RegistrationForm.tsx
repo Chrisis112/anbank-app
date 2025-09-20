@@ -52,19 +52,19 @@ export default function RegistrationForm() {
 
     try {
       if (data.password !== data.confirmPassword) {
-        toast.error('Пароли не совпадают');
+        toast.error('Password not match');
         return;
       }
 
       const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
 
       if (emailExists) {
-        toast.error('Email уже используется');
+        toast.error('Email is already registered');
         return;
       }
 
       if (nicknameExists) {
-        toast.error('Никнейм уже используется');
+        toast.error('Nickname is already used');
         return;
       }
 
@@ -82,10 +82,10 @@ export default function RegistrationForm() {
         if (result.success) {
           localStorage.setItem('token', result.token || '');
           setUser(result.user);
-          toast.success('Регистрация успешна!');
+          toast.success('Successful Register!');
           router.push('/chat');
         } else {
-          toast.error(result.error || 'Ошибка регистрации');
+          toast.error(result.error || 'Registration error');
         }
         return;
       }
@@ -93,7 +93,7 @@ export default function RegistrationForm() {
       if (!window.solana?.isPhantom) {
         toast.info(
           <>
-            Чтобы оплатить, установите Phantom Wallet:
+            For pyament connect Phantom wallet:
             <br />
             <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
               https://phantom.app/download
@@ -104,7 +104,7 @@ export default function RegistrationForm() {
       }
 
       if (!isConnected) {
-        toast.info('Подключите Phantom Wallet для оплаты');
+        toast.info('Connect Phantom Wallet for payment');
         await connectWallet();
         return;
       }
@@ -125,15 +125,15 @@ export default function RegistrationForm() {
         if (result.success) {
           localStorage.setItem('token', result.token || '');
           setUser(result.user);
-          toast.success('Регистрация успешна!');
+          toast.success('Succesful Registration!');
           router.push('/chat');
         } else {
-          toast.error(result.error || 'Ошибка регистрации');
+          toast.error(result.error || 'Registration failed');
         }
       }
     } catch (error: any) {
-      console.error('Ошибка регистрации:', error);
-      toast.error(error?.message || 'Ошибка регистрации');
+      console.error('Registration failed:', error);
+      toast.error(error?.message || 'Registration failed');
     } finally {
       setRegisterLoading(false);
     }
@@ -159,7 +159,7 @@ export default function RegistrationForm() {
         });
       }
 
-      toast.success('Вход выполнен успешно!');
+      toast.success('Login successful!');
       setIsLoginModalOpen(false);
       router.push('/chat');
     } catch (err: any) {
@@ -167,7 +167,7 @@ export default function RegistrationForm() {
         setIsLoginModalOpen(false);
         setIsSubscriptionModalOpen(true);
       } else {
-        setLoginError(err.response?.data?.error || 'Ошибка входа');
+        setLoginError(err.response?.data?.error || 'Login error');
       }
     } finally {
       setLoginLoading(false);
@@ -177,7 +177,7 @@ export default function RegistrationForm() {
   const handleRenewSubscription = async () => {
     try {
       if (!isConnected || !phantomWalletPublicKey) {
-        toast.error('Подключите Phantom Wallet');
+        toast.error('Connect Phantom Wallet');
         return;
       }
 
@@ -186,13 +186,13 @@ export default function RegistrationForm() {
       const solanaPublicKey = phantomWalletPublicKey.toBase58();
       const data = await renewSubscription(signature, solanaPublicKey, loginEmail);
 
-      toast.success('Подписка успешно продлена!');
+      toast.success('Subscription error!');
       localStorage.setItem('token', data.token);
       setUser(data.user);
       setIsSubscriptionModalOpen(false);
       router.push('/chat');
     } catch (error: any) {
-      toast.error(error.message || 'Ошибка продления подписки');
+      toast.error(error.message || 'Ыubscription renewal error');
     }
   };
 
@@ -206,7 +206,7 @@ export default function RegistrationForm() {
 
           {/* Статус подключения Phantom */}
           <div className="mb-4 text-center">
-            <p className="text-sm text-gray-400">Phantom: {isConnected ? 'Подключен' : 'Не подключен'}</p>
+            <p className="text-sm text-gray-400">Phantom: {isConnected ? 'Connected' : 'Not connected'}</p>
             {phantomWalletPublicKey && (
               <p className="text-xs text-gray-500 break-all">{phantomWalletPublicKey.toBase58().slice(0, 20)}...</p>
             )}
@@ -236,7 +236,7 @@ export default function RegistrationForm() {
                 onClick={disconnectWallet}
                 className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
               >
-                Отключить
+                Disconnect
               </button>
             )}
           </div>
@@ -250,7 +250,7 @@ export default function RegistrationForm() {
               }`}
               onClick={() => setActiveTab('register')}
             >
-              Регистрация
+              Register
             </button>
             <button
               type="button"
@@ -262,7 +262,7 @@ export default function RegistrationForm() {
                 setIsLoginModalOpen(true);
               }}
             >
-              Вход
+              Login
             </button>
           </div>
 
