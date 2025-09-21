@@ -1,3 +1,4 @@
+'use client';
 import RegistrationForm from '../components/auth/RegistrationForm';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
