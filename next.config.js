@@ -1,16 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // swcMinify: true,  // Уберите или закомментируйте
+  // swcMinify: true,  // Оставлено закомментированным по вашему желанию
   transpilePackages: [
     'react-native',
     'react-native-web',
     'expo',
     'expo-linking',
     'expo-constants',
-    '@expo/next-adapter',
-      'expo-modules-core', // добавьте этот пакет
-  'expo-modules-autolinking', // возможно нужно
+    'expo-modules-core',      // добавьте этот пакет
+    'expo-modules-autolinking', // добавьте этот пакет, если необходимо
     'react-native-svg',
   ],
   webpack: (config, { isServer }) => {
@@ -47,5 +46,15 @@ const nextConfig = {
   },
 };
 
-const { withExpo } = require('@expo/next-adapter');
+// Импортируем с проверкой наличия пакета, чтобы избежать ошибки, если пакет не установлен
+let withExpo;
+try {
+  withExpo = require('@expo/next-adapter').withExpo;
+} catch (e) {
+  console.warn(
+    '@expo/next-adapter not found. Skipping withExpo wrapper. Please install it if you need expo support.'
+  );
+  withExpo = (config) => config;
+}
+
 module.exports = withExpo(nextConfig);
