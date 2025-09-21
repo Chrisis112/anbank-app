@@ -7,9 +7,10 @@ import ChatContainer from '../../components/chat/ChatContainer';
 import CryptoBackground from '../../components/layout/CryptoBackground';
 import ProfilePhoto from './ProfilePhoto';
 import Header from '../../components/layout/Header';
-import { FaUserFriends, FaEnvelope, FaSignOutAlt, FaTimes, FaUser, FaCog } from 'react-icons/fa';
+import { FaUserFriends, FaEnvelope, FaSignOutAlt, FaTimes, FaUser, FaCog, FaCoins } from 'react-icons/fa';
 import axios from 'axios';
 import { io, Socket } from "socket.io-client";
+import TokenCreator from '@/components/token/tokenCreator';// Импорт компонента TokenCreator
 import { useRef } from "react";
 import PromoCodeManager from '@/components/auth/PromoCodeManager';
 import StarIndicator from '@/components/chat/StarIndicator';
@@ -61,7 +62,6 @@ export default function ChatPage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | undefined>(undefined);
   const [privateChats, setPrivateChats] = useState<PrivateChat[]>([]);
-
   // Проверка, является ли пользователь админом
 const isAdmin = user?.role?.includes('admin') ?? false;
 
@@ -400,8 +400,9 @@ const isAdmin = user?.role?.includes('admin') ?? false;
     setPanelType(null);
     setSelectedChatId(null);
   }
+  const [showTokenCreator, setShowTokenCreator] = useState(false);
 
-  function UserProfilePanel({
+ function UserProfilePanel({
     profile,
     loading,
     error,
@@ -426,7 +427,7 @@ const isAdmin = user?.role?.includes('admin') ?? false;
     avatarFile?: File | null;
     setAvatarFile?: (file: File | null) => void;
     hideOnline: boolean;
-    setHideOnline: (hide: boolean) => void; 
+    setHideOnline: (hide: boolean) => void;
   }) {
     const { user } = useAuth();
 
@@ -438,67 +439,95 @@ const isAdmin = user?.role?.includes('admin') ?? false;
 
     return (
       <div className="p-6 text-white flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-160px)]">
-        <div className="flex flex-col items-center mb-4">
-          <ProfilePhoto
-            currentPhotoUrl={photoUrl}
-            onUpload={() => window.location.reload()}
-          />
-        </div>
-        
-        <label className="flex items-center gap-2 mt-2">
-          <input
-            type="checkbox"
-            checked={hideOnline}
-            onChange={e => handleHideOnlineChange(e.target.checked)}
-          />
-          <span>Don't show me in online users</span>
-        </label>
+        {!showTokenCreator ? (
+          <>
+            <div className="flex flex-col items-center mb-4">
+              <ProfilePhoto currentPhotoUrl={photoUrl} onUpload={() => window.location.reload()} />
+            </div>
 
-        <label className="flex flex-col font-semibold">
-          Nickname
-          <input
-            type="text"
-            value={nickname}
-            readOnly
-            disabled
-            className="p-2 rounded text-black"
-          />
-        </label>
+            <label className="flex items-center gap-2 mt-2">
+              <input
+                type="checkbox"
+                checked={hideOnline}
+                onChange={e => handleHideOnlineChange(e.target.checked)}
+              />
+              <span>Don't show me in online users</span>
+            </label>
 
-        <label className="flex flex-col font-semibold">
-          Email
-          <input
-            type="email"
-            value={email}
-            readOnly
-            disabled
-            className="p-2 rounded text-black bg-gray-200"
-          />
-        </label>
+            <label className="flex flex-col font-semibold">
+              Nickname
+              <input
+                type="text"
+                value={nickname}
+                readOnly
+                disabled
+                className="p-2 rounded text-black"
+              />
+            </label>
 
-        <label className="flex flex-col font-semibold">
-          Role
-          <input
-            type="text"
-            value={role}
-            readOnly
-            disabled
-            className="p-2 rounded text-black bg-gray-200"
-          />
-        </label>
+            <label className="flex flex-col font-semibold">
+              Email
+              <input
+                type="email"
+                value={email}
+                readOnly
+                disabled
+                className="p-2 rounded text-black bg-gray-200"
+              />
+            </label>
 
-        <button
-          onClick={onLogout}
-          className="flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg bg-red-600 text-white font-orbitron text-base md:text-lg font-semibold transition hover:bg-red-700"
-        >
-          <FaSignOutAlt className="text-white" />
-          <span className="hidden md:inline">Logout</span>
-          <span className="inline md:hidden">Logout</span>
-        </button>
+            <label className="flex flex-col font-semibold">
+              Role
+              <input
+                type="text"
+                value={role}
+                readOnly
+                disabled
+                className="p-2 rounded text-black bg-gray-200"
+              />
+            </label>
+
+            {/* Кнопка открытия TokenCreator */}
+            <button
+              onClick={() => setShowTokenCreator(true)}
+              className="w-full flex items-center justify-center gap-3 px-3 py-3 rounded-lg bg-gradient-to-r from-crypto-accent to-blue-500 text-crypto-dark font-orbitron text-lg font-semibold transition hover:opacity-90"
+            >
+              <FaCoins className="text-crypto-dark" />
+              Создать токен
+            </button>
+
+            <button
+              onClick={onLogout}
+              className="flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg bg-red-600 text-white font-orbitron text-base md:text-lg font-semibold transition hover:bg-red-700"
+            >
+              <FaSignOutAlt className="text-white" />
+              <span className="hidden md:inline">Logout</span>
+              <span className="inline md:hidden">Logout</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-orbitron font-bold text-crypto-accent">Создание токена</h3>
+              <button
+                onClick={() => setShowTokenCreator(false)}
+                className="p-2 text-gray-400 hover:text-white transition"
+              >
+                <FaTimes size={20} />
+              </button>
+            </div>
+
+            <TokenCreator
+              onTokenCreated={address => {
+                alert(`Токен успешно создан!\nАдрес: ${address}`);
+                setShowTokenCreator(false);
+              }}
+            />
+          </>
+        )}
       </div>
     );
   }
-
   // Стилизованный компонент AdminPanel для PromoCodeManager
   function AdminPanel() {
     return (
