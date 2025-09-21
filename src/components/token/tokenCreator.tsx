@@ -107,7 +107,7 @@ export default function TokenCreator({ onTokenCreated }: TokenCreatorProps) {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
@@ -116,10 +116,10 @@ export default function TokenCreator({ onTokenCreated }: TokenCreatorProps) {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setFormData(prev => ({ ...prev, imageFile: file }));
+      setFormData((prev) => ({ ...prev, imageFile: file }));
 
       const reader = new FileReader();
-      reader.onload = e => {
+      reader.onload = (e) => {
         setImagePreview(e.target?.result as string);
       };
       reader.readAsDataURL(file);
@@ -146,7 +146,6 @@ export default function TokenCreator({ onTokenCreated }: TokenCreatorProps) {
 
       const connection = new Connection(clusterUrl, 'confirmed');
 
-      // Для теста создается временный mintAuthority Keypair — для демонстрации
       const mintAuthority = Keypair.generate();
 
       const mint = await createMint(
@@ -232,9 +231,98 @@ export default function TokenCreator({ onTokenCreated }: TokenCreatorProps) {
           </button>
 
           <div className="space-y-4">
-            {/* Остальная форма создания токена и кнопка */}
-            {/* ...как в вашем основном компоненте (см. выше) */}
-            {/* Ниже пример кнопки создания */}
+            {/* Название токена */}
+            <div>
+              <label className="block text-white font-semibold mb-2">Название токена *</label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                placeholder="Например: My Amazing Token"
+                className="w-full p-3 rounded-lg bg-crypto-input border border-crypto-accent text-white placeholder-gray-400 focus:ring-2 focus:ring-crypto-accent focus:border-transparent"
+                maxLength={32}
+              />
+            </div>
+
+            {/* Символ токена */}
+            <div>
+              <label className="block text-white font-semibold mb-2">Символ токена *</label>
+              <input
+                type="text"
+                name="symbol"
+                value={formData.symbol}
+                onChange={handleInputChange}
+                placeholder="Например: MAT"
+                className="w-full p-3 rounded-lg bg-crypto-input border border-crypto-accent text-white placeholder-gray-400 focus:ring-2 focus:ring-crypto-accent focus:border-transparent uppercase"
+                maxLength={10}
+              />
+            </div>
+
+            {/* Описание */}
+            <div>
+              <label className="block text-white font-semibold mb-2">Описание</label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                placeholder="Опишите ваш токен..."
+                rows={3}
+                className="w-full p-3 rounded-lg bg-crypto-input border border-crypto-accent text-white placeholder-gray-400 focus:ring-2 focus:ring-crypto-accent focus:border-transparent resize-none"
+              />
+            </div>
+
+            {/* Количество токенов */}
+            <div>
+              <label className="block text-white font-semibold mb-2">Общее количество *</label>
+              <input
+                type="number"
+                name="supply"
+                value={formData.supply}
+                onChange={handleInputChange}
+                placeholder="1000000"
+                min="1"
+                className="w-full p-3 rounded-lg bg-crypto-input border border-crypto-accent text-white placeholder-gray-400 focus:ring-2 focus:ring-crypto-accent focus:border-transparent"
+              />
+            </div>
+
+            {/* Десятичные знаки */}
+            <div>
+              <label className="block text-white font-semibold mb-2">Десятичные знаки</label>
+              <select
+                name="decimals"
+                value={formData.decimals}
+                onChange={handleInputChange}
+                className="w-full p-3 rounded-lg bg-crypto-input border border-crypto-accent text-white focus:ring-2 focus:ring-crypto-accent focus:border-transparent"
+              >
+                <option value={0}>0 (целые числа)</option>
+                <option value={2}>2 (как доллары)</option>
+                <option value={6}>6 (стандарт)</option>
+                <option value={9}>9 (как SOL)</option>
+              </select>
+            </div>
+
+            {/* Изображение токена */}
+            <div>
+              <label className="block text-white font-semibold mb-2">Изображение токена</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageChange}
+                className="w-full p-3 rounded-lg bg-crypto-input border border-crypto-accent text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-crypto-accent file:text-crypto-dark hover:file:bg-opacity-80"
+              />
+              {imagePreview && (
+                <div className="mt-3">
+                  <img
+                    src={imagePreview}
+                    alt="Предпросмотр"
+                    className="w-32 h-32 object-cover rounded-lg border border-crypto-accent"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Кнопка создания */}
             <button
               onClick={createToken}
               disabled={isCreating}
