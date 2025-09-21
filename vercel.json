@@ -1,0 +1,15 @@
+{
+  "builds": [
+    {
+      "src": "next.config.js",
+      "use": "@vercel/next"
+    }
+  ],
+  "build": {
+    "env": {
+      "NODE_OPTIONS": "--max-old-space-size=4096"
+    },
+    "command": "npm run install-deps && npm run build",
+    "installCommand": "npm install --legacy-peer-deps"
+  }
+}
