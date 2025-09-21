@@ -4,18 +4,13 @@ import RegistrationForm from '../components/auth/RegistrationForm';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Buffer } from 'buffer';
-import { useEffect } from 'react';
 
-if (typeof global !== 'undefined') {
-  global.Buffer = Buffer;
+// Глобальная настройка Buffer для браузера
+if (typeof window !== 'undefined') {
+  window.Buffer = Buffer;
 }
 
 export default function HomePage() {
-  useEffect(() => {
-    import('react-native-get-random-values');
-    import('react-native-url-polyfill/auto');
-  }, []);
-
   return (
     <>
       <main className="min-h-screen relative overflow-hidden">

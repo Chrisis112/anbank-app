@@ -1,16 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: [
-    'react-native',
-    'react-native-web',
-    'expo',
-    'expo-linking',
-    'expo-constants',
-    'expo-modules-core',
-    'expo-modules-autolinking',
-    'react-native-svg',
-  ],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -27,14 +17,7 @@ const nextConfig = {
         os: false,
       };
     }
-    config.resolve.alias = {
-      ...(config.resolve.alias || {}),
-      'react-native$': 'react-native-web',
-    };
     return config;
-  },
-  experimental: {
-    forceSwcTransforms: true,
   },
   async headers() {
     return [
@@ -49,14 +32,4 @@ const nextConfig = {
   },
 };
 
-let withExpo;
-try {
-  withExpo = require('@expo/next-adapter').withExpo;
-} catch (e) {
-  console.warn(
-    '@expo/next-adapter not found. Skipping withExpo wrapper. Please install it if you need expo support.'
-  );
-  withExpo = (config) => config;
-}
-
-module.exports = withExpo(nextConfig);
+module.exports = nextConfig;
