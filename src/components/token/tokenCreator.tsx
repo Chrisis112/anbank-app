@@ -6,7 +6,6 @@ import {
   createMint,
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
-  mintTo,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
@@ -23,7 +22,7 @@ interface TokenFormData {
 }
 
 interface TokenCreatorProps {
-  onTokenCreated?: (tokenAddress: string) => void;
+  onTokenCreated?: (tokenAddress: string, solanaWallet: string) => void;
 }
 
 export default function TokenCreator({ onTokenCreated }: TokenCreatorProps) {
@@ -82,17 +81,15 @@ export default function TokenCreator({ onTokenCreated }: TokenCreatorProps) {
 
       const connection = new Connection(clusterUrl, 'confirmed');
 
-      // ВНИМАНИЕ:
-      // Для реального использования mintAuthority должен принадлежать пользователю или серверу,
-      // Здесь создается временный ключ, что подходит только для тестов и обучения
+      // Для теста создается временный mintAuthority Keypair
       const mintAuthority = Keypair.generate();
 
       // Создаем mint токен
       const mint = await createMint(
         connection,
-        mintAuthority, // плательщик
-        publicKey,     // mintAuthority - владелец токена
-        null,          // freezeAuthority - отсутствует
+        mintAuthority,     // плательщик и mintAuthority Keypair для демонстрации
+        publicKey,         // mintAuthority – публичный ключ кошелька пользователя
+        null,              // freezeAuthority отсутствует
         formData.decimals,
       );
 
@@ -105,20 +102,18 @@ export default function TokenCreator({ onTokenCreated }: TokenCreatorProps) {
         ASSOCIATED_TOKEN_PROGRAM_ID,
       );
 
-      // Проверяем существует ли счет ATA
       const accountInfo = await connection.getAccountInfo(ata);
 
-      // Если ATA не существует, создаем транзакцию её создания
       if (!accountInfo) {
         const createAtaTx = new Transaction().add(
           createAssociatedTokenAccountInstruction(
-            publicKey,          // payer
-            ata,                // associated token account address
-            publicKey,          // token owner
-            mint,               // mint
+            publicKey, // payer
+            ata,       // associated token account address
+            publicKey, // token owner
+            mint,      // mint
             TOKEN_PROGRAM_ID,
             ASSOCIATED_TOKEN_PROGRAM_ID,
-          )
+          ),
         );
 
         const signed = await signTransaction(createAtaTx);
@@ -126,21 +121,15 @@ export default function TokenCreator({ onTokenCreated }: TokenCreatorProps) {
         await connection.confirmTransaction(signature, 'confirmed');
       }
 
-      // Минтим токены на ATA
-      const decimalsPow = Math.pow(10, formData.decimals);
-      const amount = BigInt(parseFloat(formData.supply) * decimalsPow);
-
-
-      // mintAuthority не совпадает с publicKey, для реального использования mintAuthority должен быть доступен для подписания.
-      // Для демонстрации отправку транзакции минтинга пропустим.
+      // Здесь можно добавить mintTo для выпуска токенов, если есть mintAuthority с приватным ключом
 
       alert(`Токен успешно создан!\nАдрес mint: ${mint.toBase58()}`);
 
       if (onTokenCreated) {
-        onTokenCreated(mint.toBase58());
+        // Отдаем mint адрес и solanaWallet (publicKey как строку), чтобы сохранить на сервере
+        onTokenCreated(mint.toBase58(), publicKey.toBase58());
       }
 
-      // Сброс формы
       setFormData({
         name: '',
         symbol: '',
