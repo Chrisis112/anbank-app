@@ -17,6 +17,7 @@
     /* === Улучшения для React / Next === */
     "allowJs": true,
     "noEmit": true,
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     "isolatedModules": true,
     "resolveJsonModule": true,
     "incremental": true,
