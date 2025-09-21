@@ -1,15 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // swcMinify: true,  // Оставлено закомментированным по вашему желанию
   transpilePackages: [
     'react-native',
     'react-native-web',
     'expo',
     'expo-linking',
     'expo-constants',
-    'expo-modules-core',       // добавьте этот пакет
-    'expo-modules-autolinking', // добавьте этот пакет, если необходимо
+    'expo-modules-core',
+    'expo-modules-autolinking',
     'react-native-svg',
   ],
   webpack: (config, { isServer }) => {
@@ -28,7 +27,6 @@ const nextConfig = {
         os: false,
       };
     }
-    // Заменяем react-native на react-native-web для веб-сборки
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       'react-native$': 'react-native-web',
@@ -51,7 +49,6 @@ const nextConfig = {
   },
 };
 
-// Безопасный импорт withExpo — если пакет не установлен, то конфигурация экспортируется напрямую
 let withExpo;
 try {
   withExpo = require('@expo/next-adapter').withExpo;

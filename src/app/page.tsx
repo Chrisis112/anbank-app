@@ -1,4 +1,5 @@
 'use client';
+
 import RegistrationForm from '../components/auth/RegistrationForm';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -11,7 +12,6 @@ if (typeof global !== 'undefined') {
 
 export default function HomePage() {
   useEffect(() => {
-    // Полифиллы для React Native Web через Expo адаптер
     import('react-native-get-random-values');
     import('react-native-url-polyfill/auto');
   }, []);

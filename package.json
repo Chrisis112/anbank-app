@@ -5,10 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "preinstall": "npm config set legacy-peer-deps true",
     "start": "next start",
-    "lint": "next lint",
-    "install-deps": "npm install --legacy-peer-deps"
+    "lint": "next lint"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.19",
