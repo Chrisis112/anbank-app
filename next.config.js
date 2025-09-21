@@ -8,7 +8,7 @@ const nextConfig = {
     'expo',
     'expo-linking',
     'expo-constants',
-    'expo-modules-core',      // добавьте этот пакет
+    'expo-modules-core',       // добавьте этот пакет
     'expo-modules-autolinking', // добавьте этот пакет, если необходимо
     'react-native-svg',
   ],
@@ -28,6 +28,11 @@ const nextConfig = {
         os: false,
       };
     }
+    // Заменяем react-native на react-native-web для веб-сборки
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      'react-native$': 'react-native-web',
+    };
     return config;
   },
   experimental: {
@@ -46,7 +51,7 @@ const nextConfig = {
   },
 };
 
-// Импортируем с проверкой наличия пакета, чтобы избежать ошибки, если пакет не установлен
+// Безопасный импорт withExpo — если пакет не установлен, то конфигурация экспортируется напрямую
 let withExpo;
 try {
   withExpo = require('@expo/next-adapter').withExpo;

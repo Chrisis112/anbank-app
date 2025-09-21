@@ -1,20 +1,20 @@
 import RegistrationForm from '../components/auth/RegistrationForm';
-import CryptoBackground from '../components/layout/CryptoBackground';
-import type { AppProps } from 'next/app';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
-// Polyfills для React Native Web
-import 'react-native-get-random-values';
-import 'react-native-url-polyfill/auto';
 import { Buffer } from 'buffer';
-import { Component } from 'react';
+import { useEffect } from 'react';
 
 if (typeof global !== 'undefined') {
   global.Buffer = Buffer;
 }
 
 export default function HomePage() {
+  useEffect(() => {
+    // Полифиллы для React Native Web через Expo адаптер
+    import('react-native-get-random-values');
+    import('react-native-url-polyfill/auto');
+  }, []);
+
   return (
     <>
       <main className="min-h-screen relative overflow-hidden">
@@ -32,7 +32,6 @@ export default function HomePage() {
         pauseOnHover
         theme="dark"
       />
-
     </>
   );
 }
