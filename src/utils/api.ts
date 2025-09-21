@@ -16,8 +16,12 @@ export interface RegisterUserData {
   paymentSignature?: string | null;
 }
 
+// Проверьте уникальность email и nickname.
+// Сделаем запрос GET, чтоб соответствовать серверному роуту.
 export const checkUnique = async (email: string, nickname: string) => {
-  const response = await api.post('/auth/check-unique', { email, nickname });
+  const response = await api.get('/auth/check-unique', {
+    params: { email, nickname }
+  });
   return response.data;
 };
 
