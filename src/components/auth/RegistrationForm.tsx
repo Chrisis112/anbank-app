@@ -13,6 +13,8 @@ import {
   SystemProgram,
   Connection,
   LAMPORTS_PER_SOL,
+  // SerializeConfig,
+  VersionedTransaction,
 } from '@solana/web3.js';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
@@ -60,53 +62,69 @@ export default function RegistrationForm() {
     return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
   };
 
-  // Исправленная функция handlePhantomPayment
+  // Универсальная функция для оплаты через Phantom для десктопа и мобильных устройств
   const handlePhantomPayment = async (): Promise<string | null> => {
     const provider = (window as any).solana;
-    
-    // Десктоп: расширение Phantom
-    if (provider && provider.isPhantom && !isMobile()) {
-      try {
-        await provider.connect();
-        const connection = new Connection(SOLANA_NETWORK);
-        const fromPubkey = provider.publicKey;
-        const toPubkey = new PublicKey(RECEIVER_WALLET);
-        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+    if (!provider || !provider.isPhantom) {
+      toast.error('Phantom Wallet не найден. Установите Phantom или откройте через мобильное приложение.');
+      return null;
+    }
 
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-        );
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPubkey;
+    try {
+      await provider.connect();
 
+      const connection = new Connection(SOLANA_NETWORK);
+      const fromPubkey = provider.publicKey;
+      const toPubkey = new PublicKey(RECEIVER_WALLET);
+      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+      );
+
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = fromPubkey;
+
+      if (!isMobile()) {
+        // Десктоп: подпись транзакции через расширение и отправка
         const signed = await provider.signTransaction(transaction);
         const signature = await connection.sendRawTransaction(signed.serialize());
         await connection.confirmTransaction(signature, 'confirmed');
 
         toast.success('✅ Payment successful!');
         return signature;
-      } catch (err) {
-        toast.error('Payment failed');
+      } else {
+        // Мобильное устройство: используем deeplink для Phantom app с сериализацией транзакции
+
+        // Для Phantom Mobile необходимо подписать транзакцию в приложении Phantom,
+        // потому сначала сериализуем транзакцию в base64 и формируем ссылку
+        const serializedTx = transaction.serialize({
+          requireAllSignatures: false,
+          verifySignatures: false,
+        });
+        const base64Tx = serializedTx.toString('base64');
+
+        // Deeplink в формате
+        // phantom://transaction?transaction=<base64Tx>&callback=<callbackUrl>
+        // Где callbackUrl - URL вашего сайта, куда вернется пользователь после оплаты
+        const callbackUrl = encodeURIComponent(window.location.origin + '/payment-callback');
+
+        // Формируем deeplink для открытия Phantom mobile с передачей транзакции и callback
+        const deepLink = `https://phantom.app/ul/v1/transaction?transaction=${encodeURIComponent(base64Tx)}&callback=${callbackUrl}&title=${encodeURIComponent('Оплата CryptoChat')}`;
+
+        toast.info('Открываем приложение Phantom для оплаты...');
+        window.location.href = deepLink;
+
+        // Возвращаем null, так как подпись будет после возврата с callback URL
         return null;
       }
-    }
-    
-    // Мобильные устройства: deeplink
-    if (isMobile()) {
-      const currentUrl = window.location.href;
-      const deepLink = `https://phantom.app/ul/browse/${encodeURIComponent(currentUrl)}`;
-      toast.info("Открываем приложение Phantom для оплаты...");
-      window.location.href = deepLink;
+    } catch (err) {
+      toast.error('Оплата не удалась');
       return null;
     }
-
-    // Phantom не найден
-    toast.error('Phantom Wallet не найден. Установите Phantom или откройте через мобильное приложение.');
-    return null;
   };
 
-  // Исправленная функция handleRenewSubscription
   const handleRenewSubscription = async () => {
     const provider = (window as any).solana;
     let solanaPublicKey = null;
@@ -122,9 +140,9 @@ export default function RegistrationForm() {
       signature = await handlePhantomPayment();
       if (!signature) return;
     } else if (isMobile()) {
-      // Мобильная версия - deeplink
+      // Мобильная версия - deeplink и уведомление
       await handlePhantomPayment();
-      toast.info("Платеж откроется в приложении Phantom. Вернитесь на сайт после оплаты для продолжения.");
+      toast.info('Платеж откроется в приложении Phantom. Вернитесь на сайт после оплаты для продолжения.');
       return;
     } else {
       toast.error('Phantom Wallet not found');
@@ -229,14 +247,14 @@ export default function RegistrationForm() {
 
       // Проводим оплату через Phantom Wallet
       const paymentSignature = await handlePhantomPayment();
-      
+
       // Для мобильных устройств оплата не вернет сразу подпись
       if (isMobile()) {
         setLoading(false);
-        toast.info("После завершения оплаты в Phantom вернитесь для завершения регистрации.");
+        toast.info('После завершения оплаты в Phantom вернитесь для завершения регистрации.');
         return;
       }
-      
+
       if (!paymentSignature) {
         toast.error('Payment failed');
         setLoading(false);
@@ -439,12 +457,9 @@ export default function RegistrationForm() {
                   <option value="creator">Creator</option>
                 </select>
               </div>
-              
-              <PromoCodeInput
-                onSuccess={handlePromoSuccess}
-                onFail={handlePromoFail}
-              />
-              
+
+              <PromoCodeInput onSuccess={handlePromoSuccess} onFail={handlePromoFail} />
+
               <button
                 type="submit"
                 disabled={loading}
