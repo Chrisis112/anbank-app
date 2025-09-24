@@ -22,11 +22,9 @@ export default function RegistrationForm() {
   const register = useAuthStore((state) => state.register);
   const { setUser } = useUserStore();
 
-  // Registration states
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
-  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [role, setRole] = useState<Role>('newbie');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,14 +32,14 @@ export default function RegistrationForm() {
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
 
-  // Login modal states
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Abort controller for login request cancellation
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const SOLANA_NETWORK =
@@ -55,81 +53,64 @@ export default function RegistrationForm() {
     };
   }, []);
 
-  // Функция определения мобильного устройства
-  const isMobile = () => {
-    return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-  };
-
-  // Исправленная функция handlePhantomPayment
-  const handlePhantomPayment = async (): Promise<string | null> => {
-    const provider = (window as any).solana;
-    
-    // Десктоп: расширение Phantom
-    if (provider && provider.isPhantom && !isMobile()) {
-      try {
-        await provider.connect();
-        const connection = new Connection(SOLANA_NETWORK);
-        const fromPubkey = provider.publicKey;
-        const toPubkey = new PublicKey(RECEIVER_WALLET);
-        const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
-
-        const transaction = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-        );
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = fromPubkey;
-
-        const signed = await provider.signTransaction(transaction);
-        const signature = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(signature, 'confirmed');
-
-        toast.success('✅ Payment successful!');
-        return signature;
-      } catch (err) {
-        toast.error('Payment failed');
-        return null;
-      }
+  // Проверяем наличие Phantom (desktop расширение или Phantom browser на телефоне)
+  const getProvider = () => {
+    if (typeof window !== 'undefined' && (window as any).solana?.isPhantom) {
+      return (window as any).solana;
     }
-    
-    // Мобильные устройства: deeplink
-    if (isMobile()) {
-      const currentUrl = window.location.href;
-      const deepLink = `https://phantom.app/ul/browse/${encodeURIComponent(currentUrl)}`;
-      toast.info("Открываем приложение Phantom для оплаты...");
-      window.location.href = deepLink;
-      return null;
-    }
-
-    // Phantom не найден
-    toast.error('Phantom Wallet не найден. Установите Phantom или откройте через мобильное приложение.');
     return null;
   };
 
-  // Исправленная функция handleRenewSubscription
-  const handleRenewSubscription = async () => {
-    const provider = (window as any).solana;
-    let solanaPublicKey = null;
-    let signature = null;
+  const handlePhantomPayment = async (): Promise<string | null> => {
+    const provider = getProvider();
+    if (!provider) {
+      toast.error('Phantom Wallet не найден. Пожалуйста, откройте сайт через Phantom Wallet.');
+      return null;
+    }
 
-    if (provider?.isPhantom && !isMobile()) {
-      // Десктоп версия
-      solanaPublicKey = provider.publicKey?.toBase58();
-      if (!solanaPublicKey) {
-        toast.error('Failed to get Phantom public key');
-        return;
-      }
-      signature = await handlePhantomPayment();
-      if (!signature) return;
-    } else if (isMobile()) {
-      // Мобильная версия - deeplink
-      await handlePhantomPayment();
-      toast.info("Платеж откроется в приложении Phantom. Вернитесь на сайт после оплаты для продолжения.");
-      return;
-    } else {
+    try {
+      await provider.connect();
+      const connection = new Connection(SOLANA_NETWORK);
+      const fromPubkey = provider.publicKey;
+      const toPubkey = new PublicKey(RECEIVER_WALLET);
+      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+      );
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = fromPubkey;
+
+      // Подписываем через Phantom
+      const signed = await provider.signTransaction(transaction);
+      const signature = await connection.sendRawTransaction(signed.serialize());
+      await connection.confirmTransaction(signature, 'confirmed');
+
+      toast.success('✅ Payment successful!');
+      return signature;
+    } catch (err) {
+      console.error('Payment error:', err);
+      toast.error('Payment failed');
+      return null;
+    }
+  };
+
+  const handleRenewSubscription = async () => {
+    const provider = getProvider();
+    if (!provider) {
       toast.error('Phantom Wallet not found');
       return;
     }
+
+    const solanaPublicKey = provider.publicKey?.toBase58();
+    if (!solanaPublicKey) {
+      toast.error('Failed to get Phantom public key');
+      return;
+    }
+
+    const signature = await handlePhantomPayment();
+    if (!signature) return;
 
     try {
       const { data } = await axios.post(
@@ -190,7 +171,6 @@ export default function RegistrationForm() {
 
     setLoading(true);
 
-    // Проверка уникальности email и никнейма
     const { emailExists, nicknameExists } = await checkUnique(email, nickname);
     if (emailExists) {
       toast.error('Email is already in use');
@@ -204,7 +184,6 @@ export default function RegistrationForm() {
     }
 
     try {
-      // Если есть валидный промокод — регистрируем без оплаты
       if (promoCode) {
         const result = await register(
           nickname,
@@ -228,36 +207,27 @@ export default function RegistrationForm() {
       }
 
       // Проводим оплату через Phantom Wallet
-      const paymentSignature = await handlePhantomPayment();
-      
-      // Для мобильных устройств оплата не вернет сразу подпись
-      if (isMobile()) {
-        setLoading(false);
-        toast.info("После завершения оплаты в Phantom вернитесь для завершения регистрации.");
-        return;
-      }
-      
-      if (!paymentSignature) {
+      const signature = await handlePhantomPayment();
+      if (!signature) {
         toast.error('Payment failed');
         setLoading(false);
         return;
       }
 
-      const solanaPublicKey = (window as any).solana?.publicKey?.toBase58();
+      const solanaPublicKey = getProvider()?.publicKey?.toBase58();
       if (!solanaPublicKey) {
         toast.error('Failed to get public key');
         setLoading(false);
         return;
       }
 
-      // Регистрация с оплатой
       const result = await register(
         nickname,
         email,
         password,
         role,
         solanaPublicKey,
-        paymentSignature,
+        signature,
         null
       );
 
@@ -309,7 +279,7 @@ export default function RegistrationForm() {
       router.push('/chat');
     } catch (err: unknown) {
       if (axios.isCancel(err)) {
-        // Request was cancelled
+        // cancelled
       } else if (axios.isAxiosError(err)) {
         if (err.response?.data?.reason === 'subscription_inactive') {
           setIsLoginModalOpen(false);
