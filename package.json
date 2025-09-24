@@ -55,7 +55,7 @@
     "typescript": "^5.5.4"
   },
   "overrides": {
-    "@solana/web3.js": "^1.95.2",
+    "@solana/web3.js": "$@solana/web3.js",
     "@solana/wallet-adapter-base": "^0.9.23"
   }
 }
