@@ -38,13 +38,7 @@ import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-r
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
-const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'mainnet-beta';
-const ENDPOINT =
-  SOLANA_NETWORK === 'mainnet-beta'
-    ? 'https://api.mainnet-beta.solana.com'
-    : SOLANA_NETWORK === 'devnet'
-    ? 'https://api.devnet.solana.com'
-    : 'https://api.mainnet-beta.solana.com';
+const ENDPOINT = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
 
 const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
 const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.01');
