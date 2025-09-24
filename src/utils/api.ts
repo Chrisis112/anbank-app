@@ -1,49 +1,83 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-});
-type Role = 'newbie' | 'advertiser' | 'creator';
-export interface RegisterUserData {
+interface CheckUniqueResponse {
+  emailExists: boolean;
+  nicknameExists: boolean;
+}
+
+interface RegisterParams {
   nickname: string;
   email: string;
   password: string;
-  role: Role[];
-  promoCode?: string | null;
+  role: string;
   solanaPublicKey?: string | null;
   paymentSignature?: string | null;
+  promoCode?: string | null;
 }
 
-// Проверьте уникальность email и nickname.
-// Сделаем запрос GET, чтоб соответствовать серверному роуту.
-export const checkUnique = async (email: string, nickname: string) => {
-  const response = await api.get('/auth/check-unique', {
-    params: { email, nickname }
-  });
-  return response.data;
-};
+interface RegisterResult {
+  success: boolean;
+  error?: string;
+  token?: string;
+  user?: any;
+}
 
-export const registerUser = async (data: RegisterUserData) => {
-  const response = await api.post('/auth/register', data);
-  return response.data;
-};
+interface LoginResult {
+  token: string;
+  user: any;
+}
 
-export const loginUser = async (email: string, password: string) => {
-  const response = await api.post('/auth/login', { email, password });
-  return response.data;
-};
+export async function checkUnique(email: string, nickname: string): Promise<CheckUniqueResponse> {
+  try {
+    const { data } = await axios.get(`${API_URL}/auth/check-unique`, {
+      params: { email, nickname },
+    });
+    return data;
+  } catch (error) {
+    // В случае ошибки считаем, что email и никнейм заняты, чтобы предотвратить регистрацию
+    return { emailExists: true, nicknameExists: true };
+  }
+}
 
-export const renewSubscription = async (
-  signature: string,
+export async function registerUser(params: RegisterParams): Promise<RegisterResult> {
+  try {
+    const { data } = await axios.post(`${API_URL}/auth/register`, {
+      nickname: params.nickname,
+      email: params.email,
+      password: params.password,
+      role: params.role,
+      solanaPublicKey: params.solanaPublicKey || null,
+      paymentSignature: params.paymentSignature || null,
+      promoCode: params.promoCode || null,
+    });
+    return { success: true, token: data.token, user: data.user };
+  } catch (error: any) {
+    return {
+      success: false,
+      error:
+        error.response?.data?.error ||
+        error.message ||
+        'Registration failed',
+    };
+  }
+}
+
+export async function renewSubscription(
+  txSignature: string,
   solanaPublicKey: string,
   email: string
-) => {
-  const response = await api.post('/auth/renew-subscription', {
-    signature,
+): Promise<{ token: string; user: any }> {
+  const { data } = await axios.post(`${API_URL}/auth/renew-subscription`, {
+    txSignature,
     solanaPublicKey,
     email,
   });
-  return response.data;
-};
+  return data;
+}
+
+export async function loginUser(email: string, password: string): Promise<LoginResult> {
+  const { data } = await axios.post(`${API_URL}/auth/login`, { email, password });
+  return data;
+}
