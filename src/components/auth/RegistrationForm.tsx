@@ -1,59 +1,45 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
-
 import RegisterForm from './RegisterForm';
 import LoginModal from './LoginModal';
 import SubscriptionModal from './SubscriptionModal';
-
-import { usePhantom } from '../../hooks/usePhantomPayment';
+import PhantomWalletConnector from '@/hooks/PhantomWalletConnector';
+import { usePhantomPayment } from '@/hooks/usePhantomPayment';
 import { checkUnique, registerUser, loginUser, renewSubscription } from '@/utils/api';
 import { useUserStore } from '@/store/userStore';
-import { useAuthStore } from '@/store/authStore';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
 export default function RegistrationForm() {
   const router = useRouter();
-  const register = useAuthStore((state) => state.register);
   const { setUser } = useUserStore();
+  const { processPayment } = usePhantomPayment();
 
-  const phantom = usePhantom();
+  const { phantomWalletPublicKey, isConnected, isConnecting, connectWallet, disconnectWallet } = PhantomWalletConnector();
 
-  // Табы и модалки
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
-
-  // Loading и ошибки логина
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
-
-  // Email для подписки
   const [loginEmail, setLoginEmail] = useState('');
-
-  // Loading для регистрации
   const [registerLoading, setRegisterLoading] = useState(false);
-
-  // Промокод
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
 
-  // Обработка успешного промокода
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
     setPromoCodeError(null);
   };
 
-  // Обработка ошибки промокода
   const handlePromoFail = (message: string) => {
     setPromoCode(null);
     setPromoCodeError(message);
   };
 
-  // Обработка submit регистрации, приходит из RegisterForm
   const handleRegisterSubmit = async (data: {
     nickname: string;
     email: string;
@@ -64,28 +50,24 @@ export default function RegistrationForm() {
   }) => {
     setRegisterLoading(true);
 
-    // Валидация паролей дублируется, но на всякий случай
-    if (data.password !== data.confirmPassword) {
-      toast.error('Passwords do not match');
-      setRegisterLoading(false);
-      return;
-    }
-
-    // Проверка уникальности
-    const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
-    if (emailExists) {
-      toast.error('Email is already in use');
-      setRegisterLoading(false);
-      return;
-    }
-    if (nicknameExists) {
-      toast.error('Nickname is already in use');
-      setRegisterLoading(false);
-      return;
-    }
-
     try {
-      // Если есть валидный промокод — регистрируем без оплаты
+      if (data.password !== data.confirmPassword) {
+        toast.error('Пароли не совпадают');
+        return;
+      }
+
+      const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
+
+      if (emailExists) {
+        toast.error('Email уже используется');
+        return;
+      }
+
+      if (nicknameExists) {
+        toast.error('Никнейм уже используется');
+        return;
+      }
+
       if (data.promoCode) {
         const result = await registerUser({
           nickname: data.nickname,
@@ -97,87 +79,66 @@ export default function RegistrationForm() {
           paymentSignature: null,
         });
 
-        setRegisterLoading(false);
+        if (result.success) {
+          localStorage.setItem('token', result.token || '');
+          setUser(result.user);
+          toast.success('Регистрация успешна!');
+          router.push('/chat');
+        } else {
+          toast.error(result.error || 'Ошибка регистрации');
+        }
+        return;
+      }
+
+      if (!window.solana?.isPhantom) {
+        toast.info(
+          <>
+            Чтобы оплатить, установите Phantom Wallet:
+            <br />
+            <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
+              https://phantom.app/download
+            </a>
+          </>
+        );
+        return;
+      }
+
+      if (!isConnected) {
+        toast.info('Подключите Phantom Wallet для оплаты');
+        await connectWallet();
+        return;
+      }
+
+      if (phantomWalletPublicKey) {
+        const signature = await processPayment({ phantomWalletPublicKey });
+
+        const result = await registerUser({
+          nickname: data.nickname,
+          email: data.email,
+          password: data.password,
+          role: data.role,
+          promoCode: null,
+          solanaPublicKey: phantomWalletPublicKey.toBase58(),
+          paymentSignature: signature,
+        });
 
         if (result.success) {
           localStorage.setItem('token', result.token || '');
           setUser(result.user);
-          toast.success('Registration successful!');
+          toast.success('Регистрация успешна!');
           router.push('/chat');
         } else {
-          toast.error(result.error || 'Registration failed');
+          toast.error(result.error || 'Ошибка регистрации');
         }
-        return;
       }
-
-      // Для мобильных устройств - сохраняем данные формы и запускаем платеж
-      if (phantom.isMobile()) {
-        localStorage.setItem('phantom_actual_action', 'registration');
-        localStorage.setItem(
-          'phantom_registration_data',
-          JSON.stringify({
-            nickname: data.nickname,
-            email: data.email,
-            password: data.password,
-            role: data.role,
-            promoCode: data.promoCode,
-          })
-        );
-
-        if (!phantom.phantomPublicKey) {
-          localStorage.setItem('phantom_delayed_action', 'registration');
-          await phantom.connectPhantomMobile();
-        } else {
-          await phantom.handlePayment();
-        }
-
-        setRegisterLoading(false);
-        toast.info('Оплата выполняется в приложении Phantom. После завершения оплаты вернитесь сюда для продолжения.');
-        return;
-      }
-
-      // Десктоп версия - обычный flow оплаты
-      const paymentSignature = await phantom.handlePayment();
-      if (!paymentSignature) {
-        toast.error('Payment failed');
-        setRegisterLoading(false);
-        return;
-      }
-
-      const solanaPublicKey = (window as any).solana?.publicKey?.toBase58();
-      if (!solanaPublicKey) {
-        toast.error('Failed to get public key');
-        setRegisterLoading(false);
-        return;
-      }
-
-      const result = await registerUser({
-        nickname: data.nickname,
-        email: data.email,
-        password: data.password,
-        role: data.role,
-        solanaPublicKey,
-        paymentSignature,
-        promoCode: null,
-      });
-
+    } catch (error: any) {
+      console.error('Ошибка регистрации:', error);
+      toast.error(error?.message || 'Ошибка регистрации');
+    } finally {
       setRegisterLoading(false);
-
-      if (result.success) {
-        localStorage.setItem('token', result.token || '');
-        setUser(result.user);
-        toast.success('Registration successful!');
-        router.push('/chat');
-      } else {
-        toast.error(result.error || 'Registration failed');
-      }
-    } catch (error) {
-      setRegisterLoading(false);
-      toast.error('Registration failed');
     }
   };
 
-  // Обработка сабмита логина
   const handleLoginSubmit = async (email: string, password: string) => {
     setLoginLoading(true);
     setLoginError(null);
@@ -185,7 +146,6 @@ export default function RegistrationForm() {
 
     try {
       const data = await loginUser(email, password);
-
       localStorage.setItem('token', data.token);
 
       if (data.user) {
@@ -199,7 +159,7 @@ export default function RegistrationForm() {
         });
       }
 
-      toast.success('Login successful!');
+      toast.success('Вход выполнен успешно!');
       setIsLoginModalOpen(false);
       router.push('/chat');
     } catch (err: any) {
@@ -207,110 +167,102 @@ export default function RegistrationForm() {
         setIsLoginModalOpen(false);
         setIsSubscriptionModalOpen(true);
       } else {
-        setLoginError(err.response?.data?.error || 'Login error. Check your email and password.');
+        setLoginError(err.response?.data?.error || 'Ошибка входа');
       }
     } finally {
       setLoginLoading(false);
     }
   };
 
-  // Закрыть модалку логина
-  const closeLoginModal = () => {
-    setIsLoginModalOpen(false);
-    setLoginError(null);
-  };
-
-  // Открыть модалку логина и переключить таб
-  const openLoginModal = () => {
-    setIsLoginModalOpen(true);
-    setLoginError(null);
-    setActiveTab('login');
-  };
-
-  // Обработка продления подписки
   const handleRenewSubscription = async () => {
-    if ((window as any).solana?.isPhantom && !phantom.isMobile()) {
-      const solanaPublicKey = (window as any).solana.publicKey?.toBase58();
-      if (!solanaPublicKey) {
-        toast.error('Failed to get Phantom public key');
+    try {
+      if (!isConnected || !phantomWalletPublicKey) {
+        toast.error('Подключите Phantom Wallet');
         return;
       }
-      const signature = await phantom.handlePayment();
-      if (!signature) return;
 
-      try {
-        const data = await renewSubscription(signature, solanaPublicKey, loginEmail);
-        toast.success('Subscription successfully renewed!');
-        localStorage.setItem('token', data.token);
-        setUser(data.user);
-        setIsSubscriptionModalOpen(false);
-        router.push('/chat');
-      } catch (err: any) {
-        toast.error(
-          err.response?.data?.error || 'Error renewing subscription'
-        );
-      }
-    } else if (phantom.isMobile()) {
-      localStorage.setItem('phantom_actual_action', 'subscription');
-      localStorage.setItem(
-        'phantom_subscription_data',
-        JSON.stringify({ email: loginEmail })
-      );
+      const signature = await processPayment({ phantomWalletPublicKey });
 
-      if (!phantom.phantomPublicKey) {
-        localStorage.setItem('phantom_delayed_action', 'subscription');
-        await phantom.connectPhantomMobile();
-      } else {
-        await phantom.handlePayment();
-      }
+      const solanaPublicKey = phantomWalletPublicKey.toBase58();
+      const data = await renewSubscription(signature, solanaPublicKey, loginEmail);
 
-      toast.info('После подписания транзакции в Phantom вернитесь для завершения.');
-      return;
-    } else {
-      toast.error('Phantom Wallet not found');
-      return;
+      toast.success('Подписка успешно продлена!');
+      localStorage.setItem('token', data.token);
+      setUser(data.user);
+      setIsSubscriptionModalOpen(false);
+      router.push('/chat');
+    } catch (error: any) {
+      toast.error(error.message || 'Ошибка продления подписки');
     }
   };
 
-  // Обрабатываем Phantom callback при монтировании
-  useEffect(() => {
-    phantom.processCallback();
-  }, []);
+  const isPhantomInstalled = typeof window !== 'undefined' && !!window.solana?.isPhantom;
 
   return (
     <>
       <div className="bg-crypto-dark min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-xl mx-auto px-6 py-8 rounded-xl shadow-2xl bg-crypto-dark">
-          <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
-            CryptoChat
-          </h1>
+          <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">CryptoChat</h1>
+
+          {/* Статус подключения Phantom */}
+          <div className="mb-4 text-center">
+            <p className="text-sm text-gray-400">Phantom: {isConnected ? 'Подключен' : 'Не подключен'}</p>
+            {phantomWalletPublicKey && (
+              <p className="text-xs text-gray-500 break-all">{phantomWalletPublicKey.toBase58().slice(0, 20)}...</p>
+            )}
+            {!isConnected && (
+              <>
+                {!isPhantomInstalled && (
+                  <p className="text-red-500 mb-2">
+                    Установите Phantom Wallet:{' '}
+                    <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
+                      https://phantom.app/download
+                    </a>
+                  </p>
+                )}
+                {isPhantomInstalled && (
+                  <button
+                    onClick={connectWallet}
+                    disabled={isConnecting}
+                    className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {isConnecting ? 'Подключение...' : 'Подключить Phantom'}
+                  </button>
+                )}
+              </>
+            )}
+            {isConnected && (
+              <button
+                onClick={disconnectWallet}
+                className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Отключить
+              </button>
+            )}
+          </div>
 
           {/* Tab Switcher */}
           <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
             <button
+              type="button"
               className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'register'
-                  ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#6481f5_100%)] text-white'
-                  : 'bg-transparent text-gray-300'
+                activeTab === 'register' ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#6481f5_100%)] text-white' : 'bg-transparent text-gray-300'
               }`}
               onClick={() => setActiveTab('register')}
-              type="button"
             >
-              Register
+              Регистрация
             </button>
             <button
+              type="button"
               className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
-                activeTab === 'login'
-                  ? 'bg-[linear-gradient(90deg,#191b1f_0%,#232531_100%)] text-white'
-                  : 'bg-transparent text-gray-300'
+                activeTab === 'login' ? 'bg-[linear-gradient(90deg,#191b1f_0%,#232531_100%)] text-white' : 'bg-transparent text-gray-300'
               }`}
               onClick={() => {
                 setActiveTab('login');
-                openLoginModal();
+                setIsLoginModalOpen(true);
               }}
-              type="button"
             >
-              Login
+              Вход
             </button>
           </div>
 
@@ -328,22 +280,9 @@ export default function RegistrationForm() {
         </div>
       </div>
 
-      {/* Login Modal */}
-      <LoginModal
-        isOpen={isLoginModalOpen}
-        onClose={closeLoginModal}
-        onSubmit={handleLoginSubmit}
-        loading={loginLoading}
-        error={loginError}
-      />
+      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onSubmit={handleLoginSubmit} loading={loginLoading} error={loginError} />
 
-      {/* Subscription Modal */}
-      <SubscriptionModal
-        isOpen={isSubscriptionModalOpen}
-        email={loginEmail}
-        onClose={() => setIsSubscriptionModalOpen(false)}
-        onPay={handleRenewSubscription}
-      />
+      <SubscriptionModal isOpen={isSubscriptionModalOpen} email={loginEmail} onClose={() => setIsSubscriptionModalOpen(false)} onPay={handleRenewSubscription} />
     </>
   );
 }
