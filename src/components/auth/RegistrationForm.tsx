@@ -93,13 +93,13 @@ export default function RegistrationForm() {
     }
     
     // Мобильные устройства: deeplink
-    if (isMobile()) {
-      const currentUrl = window.location.href;
-      const deepLink = `https://phantom.app/ul/browse/${encodeURIComponent(currentUrl)}`;
-      toast.info("Открываем приложение Phantom для оплаты...");
-      window.location.href = deepLink;
-      return null;
-    }
+if (isMobile()) {
+  const phantomAppUrl = `https://app.anbanktoken.com`;
+  const deepLink = `https://phantom.app/ul/browse/${encodeURIComponent(phantomAppUrl)}`;
+  toast.info("Открываем Phantom Browser для оплаты...");
+  window.location.href = deepLink;
+  return null;
+}
 
     // Phantom не найден
     toast.error('Phantom Wallet не найден. Установите Phantom или откройте через мобильное приложение.');
