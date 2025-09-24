@@ -83,50 +83,51 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 
-  register: async (
-    nickname,
-    email,
-    password,
-    role,
-    solanaPublicKey = null,
-    paymentSignature = null,
-    promoCode = null
-  ) => {
-    set({ isLoading: true });
-    try {
-      const { data } = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
-        {
-          nickname,
-          email,
-          password,
-          role,
-          solanaPublicKey,
-          paymentSignature,
-          promoCode,
-        }
-      );
-
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-        axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
+register: async (
+  nickname,
+  email,
+  password,
+  role,
+  solanaPublicKey = null,
+  paymentSignature = null,
+  promoCode = null
+) => {
+  set({ isLoading: true });
+  try {
+    const { data } = await axios.post(
+      `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
+      {
+        nickname,
+        email,
+        password,
+        role: [role], // <--- Передаем массив ролей
+        solanaPublicKey,
+        paymentSignature,
+        promoCode,
       }
+    );
 
-      set({ token: data.token || null, user: data.user || null, isLoading: false });
-
-      return {
-        success: true,
-        user: data.user,
-        token: data.token,
-      };
-    } catch (err: any) {
-      set({ isLoading: false });
-      return {
-        success: false,
-        error: err.response?.data?.message || "Registration failed",
-      };
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+      axios.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
     }
-  },
+
+    set({ token: data.token || null, user: data.user || null, isLoading: false });
+
+    return {
+      success: true,
+      user: data.user,
+      token: data.token,
+    };
+  } catch (err: any) {
+    set({ isLoading: false });
+    return {
+      success: false,
+      error:
+        err.response?.data?.message || err.response?.data?.error || "Registration failed",
+    };
+  }
+},
 
   logout() {
     localStorage.removeItem("token");
