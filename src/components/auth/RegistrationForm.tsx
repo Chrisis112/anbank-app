@@ -1,26 +1,62 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
 import { toast } from 'react-toastify';
 import PromoCodeInput from './PromoCodeInput';
 import axios from 'axios';
+
 import {
+  Connection,
   PublicKey,
   Transaction,
   SystemProgram,
-  Connection,
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 
+import {
+  WalletAdapterNetwork,
+  WalletError,
+} from '@solana/wallet-adapter-base';
+import {
+  ConnectionProvider,
+  WalletProvider,
+  useWallet,
+  useConnection,
+} from '@solana/wallet-adapter-react';
+import {
+  PhantomWalletAdapter,
+  // другие нужные адаптеры можно добавить сюда
+} from '@solana/wallet-adapter-wallets';
+
+import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+
+// Не забудьте добавить стили wallet-adapter-react-ui в проект:
+// import '@solana/wallet-adapter-react-ui/styles.css';
+
 type Role = 'newbie' | 'advertiser' | 'creator';
 
-export default function RegistrationForm() {
+const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'mainnet-beta';
+const ENDPOINT =
+  SOLANA_NETWORK === 'mainnet-beta'
+    ? 'https://api.mainnet-beta.solana.com'
+    : SOLANA_NETWORK === 'devnet'
+    ? 'https://api.devnet.solana.com'
+    : 'https://api.mainnet-beta.solana.com';
+
+const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
+const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.01');
+
+function InnerRegistrationForm() {
   const router = useRouter();
   const register = useAuthStore((state) => state.register);
   const { setUser } = useUserStore();
+
+  // Solana adapter hooks
+  const { publicKey, sendTransaction, connected, connect, disconnect, wallet } = useWallet();
+  const { connection } = useConnection();
 
   // ------------------ state ------------------
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
@@ -43,100 +79,22 @@ export default function RegistrationForm() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // ------------------ Solana ------------------
-  const SOLANA_NETWORK =
-    process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
-  const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
-  const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.01');
+  // ------------------ Помощники ------------------
 
-  useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort();
-    };
-  }, []);
-
-  // Получить провайдера Phantom
-  const getProvider = () => {
-    if (typeof window !== 'undefined' && (window as any).solana?.isPhantom) {
-      return (window as any).solana;
-    }
-    return null;
-  };
-
-  // Оплата через Phantom
-  const handlePhantomPayment = async (): Promise<string | null> => {
-    const provider = getProvider();
-    if (!provider) {
-      toast.error('Phantom Wallet не найден. Откройте сайт через Phantom Wallet.');
-      return null;
-    }
-
-    try {
-      await provider.connect();
-      const connection = new Connection(SOLANA_NETWORK);
-      const fromPubkey = provider.publicKey;
-      const toPubkey = new PublicKey(RECEIVER_WALLET);
-      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
-
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-      );
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = fromPubkey;
-
-      const signed = await provider.signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signed.serialize());
-      await connection.confirmTransaction(signature, 'confirmed');
-
-      toast.success('✅ Платеж прошёл успешно');
-      return signature;
-    } catch (err) {
-      console.error('Payment error:', err);
-      toast.error('Ошибка при оплате');
-      return null;
-    }
-  };
-
-  // Продление подписки
-  const handleRenewSubscription = async () => {
-    const provider = getProvider();
-    if (!provider) {
-      toast.error('Phantom Wallet не найден');
-      return;
-    }
-
-    const solanaPublicKey = provider.publicKey?.toBase58();
-    if (!solanaPublicKey) {
-      toast.error('Не удалось получить публичный ключ');
-      return;
-    }
-
-    const signature = await handlePhantomPayment();
-    if (!signature) return;
-
-    try {
-      const { data } = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
-        {
-          txSignature: signature,
-          solanaPublicKey,
-          email: loginEmail,
-        }
-      );
-      toast.success('Подписка продлена!');
-      localStorage.setItem('token', data.token);
-      setUser(data.user);
-      setIsSubscriptionModalOpen(false);
-      router.push('/chat');
-    } catch (err) {
-      toast.error(
-        axios.isAxiosError(err) && err.response?.data?.error
-          ? err.response.data.error
-          : 'Ошибка при продлении подписки'
-      );
-    }
-  };
+  const checkUnique = useCallback(
+    async (email: string, nickname: string) => {
+      try {
+        const { data } = await axios.get(
+          `${process.env.NEXT_PUBLIC_API_URL}/auth/check-unique`,
+          { params: { email, nickname } }
+        );
+        return data;
+      } catch {
+        return { emailExists: true, nicknameExists: true };
+      }
+    },
+    []
+  );
 
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
@@ -148,19 +106,48 @@ export default function RegistrationForm() {
     setPromoCodeError(message);
   };
 
-  const checkUnique = async (email: string, nickname: string) => {
-    try {
-      const { data } = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/check-unique`,
-        { params: { email, nickname } }
-      );
-      return data;
-    } catch {
-      return { emailExists: true, nicknameExists: true };
+  // ------------------ Платеж ------------------
+
+  const handleSolanaPayment = useCallback(async (): Promise<string | null> => {
+    if (!connected || !publicKey || !connection) {
+      toast.error('Пожалуйста, подключите кошелек Solana.');
+      return null;
     }
-  };
+    try {
+      const toPubkey = new PublicKey(RECEIVER_WALLET);
+      const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+
+      // Создаем транзакцию перевода
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey,
+          toPubkey,
+          lamports,
+        })
+      );
+
+      // Получаем свежий блокхеш
+      const { blockhash } = await connection.getLatestBlockhash('finalized');
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = publicKey;
+
+      // Отправляем транзакцию через адаптер (Phantom и др.)
+      const signature = await sendTransaction(transaction, connection);
+
+      // Ждем подтверждения транзакции
+      await connection.confirmTransaction(signature, 'confirmed');
+
+      toast.success('✅ Платеж прошёл успешно');
+      return signature;
+    } catch (error) {
+      console.error('Ошибка при оплате:', error);
+      toast.error('Ошибка при оплате');
+      return null;
+    }
+  }, [connected, publicKey, connection, sendTransaction]);
 
   // ------------------ Регистрация ------------------
+
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -188,7 +175,7 @@ export default function RegistrationForm() {
     }
 
     try {
-      // Промо-код → регистрация без оплаты
+      // Регистрация с промо-кодом (без оплаты)
       if (promoCode) {
         const result = await register(
           nickname,
@@ -210,15 +197,21 @@ export default function RegistrationForm() {
         return;
       }
 
-      // Иначе — с оплатой
-      const signature = await handlePhantomPayment();
+      // Регистрация с оплатой
+      if (!connected) {
+        toast.error('Подключите кошелек для оплаты');
+        setLoading(false);
+        return;
+      }
+
+      const signature = await handleSolanaPayment();
       if (!signature) {
         toast.error('Платеж не прошел');
         setLoading(false);
         return;
       }
 
-      const solanaPublicKey = getProvider()?.publicKey?.toBase58();
+      const solanaPublicKey = publicKey?.toBase58();
       if (!solanaPublicKey) {
         toast.error('Не удалось получить ключ кошелька');
         setLoading(false);
@@ -229,7 +222,7 @@ export default function RegistrationForm() {
         nickname,
         email,
         password,
-        role,                  // строка, как ожидает бэкенд
+        role,
         solanaPublicKey,
         signature,
         null
@@ -250,6 +243,7 @@ export default function RegistrationForm() {
   };
 
   // ------------------ Логин ------------------
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginLoading(true);
@@ -290,9 +284,7 @@ export default function RegistrationForm() {
           setIsLoginModalOpen(false);
           setIsSubscriptionModalOpen(true);
         } else {
-          setLoginError(
-            err.response?.data?.error || 'Ошибка входа. Проверьте данные.'
-          );
+          setLoginError(err.response?.data?.error || 'Ошибка входа. Проверьте данные.');
         }
       } else {
         setLoginError('Ошибка входа. Проверьте данные.');
@@ -302,7 +294,40 @@ export default function RegistrationForm() {
     }
   };
 
-  // ------------------ UI helpers ------------------
+  // ------------------ Продление подписки ------------------
+
+  const handleRenewSubscription = async () => {
+    if (!connected) {
+      toast.error('Подключите кошелек для оплаты');
+      return;
+    }
+
+    const signature = await handleSolanaPayment();
+    if (!signature) return;
+
+    try {
+      const { data } = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
+        {
+          txSignature: signature,
+          solanaPublicKey: publicKey?.toBase58(),
+          email: loginEmail,
+        }
+      );
+      toast.success('Подписка продлена!');
+      localStorage.setItem('token', data.token);
+      setUser(data.user);
+      setIsSubscriptionModalOpen(false);
+      router.push('/chat');
+    } catch (err) {
+      toast.error(
+        axios.isAxiosError(err) && err.response?.data?.error
+          ? err.response.data.error
+          : 'Ошибка при продлении подписки'
+      );
+    }
+  };
+
   const openLoginModal = () => {
     setIsLoginModalOpen(true);
     setLoginError(null);
@@ -325,6 +350,11 @@ export default function RegistrationForm() {
           <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
             CryptoChat
           </h1>
+
+          {/* Wallet Multi Button */}
+          <div className="mb-4 text-center">
+            <WalletMultiButton className="wallet-button" />
+          </div>
 
           {/* Tab Switcher */}
           <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
@@ -415,12 +445,9 @@ export default function RegistrationForm() {
                   <option value="creator">Creator</option>
                 </select>
               </div>
-              
-              <PromoCodeInput
-                onSuccess={handlePromoSuccess}
-                onFail={handlePromoFail}
-              />
-              
+
+              <PromoCodeInput onSuccess={handlePromoSuccess} onFail={handlePromoFail} />
+
               <button
                 type="submit"
                 disabled={loading}
@@ -433,7 +460,7 @@ export default function RegistrationForm() {
         </div>
       </div>
 
-      {/* Login Modal */}
+      {/* Логин Модал */}
       {isLoginModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-crypto-dark rounded-xl shadow-2xl w-full max-w-md p-6 relative">
@@ -448,9 +475,7 @@ export default function RegistrationForm() {
               </svg>
             </button>
 
-            <h2 className="text-2xl font-orbitron gradient-title mb-6 text-center text-crypto-accent">
-              Login
-            </h2>
+            <h2 className="text-2xl font-orbitron gradient-title mb-6 text-center text-crypto-accent">Login</h2>
 
             {loginError && (
               <div
@@ -518,13 +543,9 @@ export default function RegistrationForm() {
               ✕
             </button>
 
-            <h2 className="text-2xl font-orbitron text-center text-crypto-accent mb-4">
-              Renew your subscription
-            </h2>
+            <h2 className="text-2xl font-orbitron text-center text-crypto-accent mb-4">Renew your subscription</h2>
 
-            <p className="text-gray-300 text-center mb-6">
-              Your subscription has expired. To continue using the app, please renew it.
-            </p>
+            <p className="text-gray-300 text-center mb-6">Your subscription has expired. To continue using the app, please renew it.</p>
 
             <p className="text-gray-400 text-center mb-6 italic">
               Please note that the subscription will be extended for the user: <br />
@@ -541,5 +562,24 @@ export default function RegistrationForm() {
         </div>
       )}
     </>
+  );
+}
+
+export default function RegistrationFormWrapper() {
+  const network = WalletAdapterNetwork.Mainnet; // Можно динамически менять, например из .env
+
+  const wallets = [
+    new PhantomWalletAdapter(),
+    // добавить другие адаптеры по необходимости
+  ];
+
+  return (
+    <ConnectionProvider endpoint={ENDPOINT}>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>
+          <InnerRegistrationForm />
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
   );
 }
