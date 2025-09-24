@@ -94,8 +94,7 @@ export default function RegistrationForm() {
     
     // Мобильные устройства: deeplink
 if (isMobile()) {
-  const phantomAppUrl = `https://app.anbanktoken.com`;
-  const deepLink = `https://phantom.app/ul/browse/${encodeURIComponent(phantomAppUrl)}`;
+  const deepLink = `phantom://browse?url=${encodeURIComponent('https://app.anbanktoken.com')}`;
   toast.info("Открываем Phantom Browser для оплаты...");
   window.location.href = deepLink;
   return null;
