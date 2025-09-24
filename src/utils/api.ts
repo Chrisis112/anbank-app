@@ -5,12 +5,12 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/a
 const api = axios.create({
   baseURL: API_BASE_URL,
 });
-
+type Role = 'newbie' | 'advertiser' | 'creator';
 export interface RegisterUserData {
   nickname: string;
   email: string;
   password: string;
-  role: string;
+  role: Role[];
   promoCode?: string | null;
   solanaPublicKey?: string | null;
   paymentSignature?: string | null;
