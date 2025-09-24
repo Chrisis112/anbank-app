@@ -39,61 +39,54 @@ export default function RegistrationForm() {
     setPromoCode(null);
     setPromoCodeError(message);
   };
+const handleRegisterSubmit = async (data: {
+  nickname: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  role: Role;
+  promoCode: string | null;
+}) => {
+  setRegisterLoading(true);
 
-  const handleRegisterSubmit = async (data: {
-    nickname: string;
-    email: string;
-    password: string;
-    confirmPassword: string;
-    role: Role;
-    promoCode: string | null;
-  }) => {
-    setRegisterLoading(true);
+  try {
+    if (data.password !== data.confirmPassword) {
+      toast.error('Password not match');
+      return;
+    }
 
-    try {
-      if (data.password !== data.confirmPassword) {
-        toast.error('Password not match');
-        return;
-      }
+    const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
 
-      const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
+    if (emailExists) {
+      toast.error('Email is already registered');
+      return;
+    }
 
-      if (emailExists) {
-        toast.error('Email is already registered');
-        return;
-      }
+    if (nicknameExists) {
+      toast.error('Nickname is already used');
+      return;
+    }
 
-      if (nicknameExists) {
-        toast.error('Nickname is already used');
-        return;
-      }
+    // Преобразуем role в массив, как того ждёт сервер
+    const rolesArray = [data.role];
 
-      if (data.promoCode) {
-        const result = await registerUser({
-          nickname: data.nickname,
-          email: data.email,
-          password: data.password,
-          role: [data.role],
-          promoCode: data.promoCode,
-          solanaPublicKey: null,
-          paymentSignature: null,
-        });
+    let result;
 
-        if (result.success) {
-          localStorage.setItem('token', result.token || '');
-          setUser(result.user);
-          toast.success('Successful Register!');
-          router.push('/chat');
-        } else {
-          toast.error(result.error || 'Registration error');
-        }
-        return;
-      }
-
+    if (data.promoCode) {
+      result = await registerUser({
+        nickname: data.nickname,
+        email: data.email,
+        password: data.password,
+        role: rolesArray,
+        promoCode: data.promoCode,
+        solanaPublicKey: null,
+        paymentSignature: null,
+      });
+    } else {
       if (!window.solana?.isPhantom) {
         toast.info(
           <>
-            For pyament connect Phantom wallet:
+            For payment connect Phantom wallet:
             <br />
             <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
               https://phantom.app/download
@@ -112,32 +105,44 @@ export default function RegistrationForm() {
       if (phantomWalletPublicKey) {
         const signature = await processPayment({ phantomWalletPublicKey });
 
-        const result = await registerUser({
+        result = await registerUser({
           nickname: data.nickname,
           email: data.email,
           password: data.password,
-          role: [data.role],
+          role: rolesArray,
           promoCode: null,
           solanaPublicKey: phantomWalletPublicKey.toBase58(),
           paymentSignature: signature,
         });
-
-        if (result.success) {
-          localStorage.setItem('token', result.token || '');
-          setUser(result.user);
-          toast.success('Succesful Registration!');
-          router.push('/chat');
-        } else {
-          toast.error(result.error || 'Registration failed');
-        }
+      } else {
+        toast.error('Phantom Wallet Public Key is missing');
+        return;
       }
-    } catch (error: any) {
-      console.error('Registration failed:', error);
-      toast.error(error?.message || 'Registration failed');
-    } finally {
-      setRegisterLoading(false);
     }
-  };
+
+    console.log('Registration result:', result);
+
+    if (result && (result.success === true || result.user)) {
+      localStorage.setItem('token', result.token || '');
+      setUser(result.user);
+      toast.success('Successful Register!');
+      try {
+        await router.push('/chat');
+      } catch (navError) {
+        console.error('Navigation error:', navError);
+        toast.error('Navigation error after registration');
+      }
+    } else {
+      toast.error(result.error || 'Registration error');
+    }
+  } catch (error: any) {
+    console.error('Registration failed:', error);
+    toast.error(error?.message || 'Registration failed');
+  } finally {
+    setRegisterLoading(false);
+  }
+};
+
 
   const handleLoginSubmit = async (email: string, password: string) => {
     setLoginLoading(true);
