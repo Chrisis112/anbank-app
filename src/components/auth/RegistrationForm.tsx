@@ -22,6 +22,7 @@ export default function RegistrationForm() {
   const register = useAuthStore((state) => state.register);
   const { setUser } = useUserStore();
 
+  // ------------------ state ------------------
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
@@ -42,6 +43,7 @@ export default function RegistrationForm() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // ------------------ Solana ------------------
   const SOLANA_NETWORK =
     process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
   const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
@@ -53,7 +55,7 @@ export default function RegistrationForm() {
     };
   }, []);
 
-  // Проверяем наличие Phantom (desktop расширение или Phantom browser на телефоне)
+  // Получить провайдера Phantom
   const getProvider = () => {
     if (typeof window !== 'undefined' && (window as any).solana?.isPhantom) {
       return (window as any).solana;
@@ -61,10 +63,11 @@ export default function RegistrationForm() {
     return null;
   };
 
+  // Оплата через Phantom
   const handlePhantomPayment = async (): Promise<string | null> => {
     const provider = getProvider();
     if (!provider) {
-      toast.error('Phantom Wallet не найден. Пожалуйста, откройте сайт через Phantom Wallet.');
+      toast.error('Phantom Wallet не найден. Откройте сайт через Phantom Wallet.');
       return null;
     }
 
@@ -82,30 +85,30 @@ export default function RegistrationForm() {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
 
-      // Подписываем через Phantom
       const signed = await provider.signTransaction(transaction);
       const signature = await connection.sendRawTransaction(signed.serialize());
       await connection.confirmTransaction(signature, 'confirmed');
 
-      toast.success('✅ Payment successful!');
+      toast.success('✅ Платеж прошёл успешно');
       return signature;
     } catch (err) {
       console.error('Payment error:', err);
-      toast.error('Payment failed');
+      toast.error('Ошибка при оплате');
       return null;
     }
   };
 
+  // Продление подписки
   const handleRenewSubscription = async () => {
     const provider = getProvider();
     if (!provider) {
-      toast.error('Phantom Wallet not found');
+      toast.error('Phantom Wallet не найден');
       return;
     }
 
     const solanaPublicKey = provider.publicKey?.toBase58();
     if (!solanaPublicKey) {
-      toast.error('Failed to get Phantom public key');
+      toast.error('Не удалось получить публичный ключ');
       return;
     }
 
@@ -121,7 +124,7 @@ export default function RegistrationForm() {
           email: loginEmail,
         }
       );
-      toast.success('Subscription successfully renewed!');
+      toast.success('Подписка продлена!');
       localStorage.setItem('token', data.token);
       setUser(data.user);
       setIsSubscriptionModalOpen(false);
@@ -130,7 +133,7 @@ export default function RegistrationForm() {
       toast.error(
         axios.isAxiosError(err) && err.response?.data?.error
           ? err.response.data.error
-          : 'Error renewing subscription'
+          : 'Ошибка при продлении подписки'
       );
     }
   };
@@ -152,20 +155,21 @@ export default function RegistrationForm() {
         { params: { email, nickname } }
       );
       return data;
-    } catch (error) {
+    } catch {
       return { emailExists: true, nicknameExists: true };
     }
   };
 
+  // ------------------ Регистрация ------------------
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!nickname || !email || !password || !confirmPassword) {
-      toast.error('Fill all fields');
+      toast.error('Заполните все поля');
       return;
     }
     if (password !== confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error('Пароли не совпадают');
       return;
     }
 
@@ -173,17 +177,18 @@ export default function RegistrationForm() {
 
     const { emailExists, nicknameExists } = await checkUnique(email, nickname);
     if (emailExists) {
-      toast.error('Email is already in use');
+      toast.error('Email уже используется');
       setLoading(false);
       return;
     }
     if (nicknameExists) {
-      toast.error('Nickname is already in use');
+      toast.error('Ник уже используется');
       setLoading(false);
       return;
     }
 
     try {
+      // Промо-код → регистрация без оплаты
       if (promoCode) {
         const result = await register(
           nickname,
@@ -194,29 +199,28 @@ export default function RegistrationForm() {
           null,
           promoCode
         );
-
         setLoading(false);
 
         if (result.success) {
-          toast.success('Registration successful!');
+          toast.success('Регистрация успешна');
           router.push('/chat');
         } else {
-          toast.error(result.error || 'Registration failed');
+          toast.error(result.error || 'Ошибка регистрации');
         }
         return;
       }
 
-      // Проводим оплату через Phantom Wallet
+      // Иначе — с оплатой
       const signature = await handlePhantomPayment();
       if (!signature) {
-        toast.error('Payment failed');
+        toast.error('Платеж не прошел');
         setLoading(false);
         return;
       }
 
       const solanaPublicKey = getProvider()?.publicKey?.toBase58();
       if (!solanaPublicKey) {
-        toast.error('Failed to get public key');
+        toast.error('Не удалось получить ключ кошелька');
         setLoading(false);
         return;
       }
@@ -225,7 +229,7 @@ export default function RegistrationForm() {
         nickname,
         email,
         password,
-        role,
+        role,                  // строка, как ожидает бэкенд
         solanaPublicKey,
         signature,
         null
@@ -234,17 +238,18 @@ export default function RegistrationForm() {
       setLoading(false);
 
       if (result.success) {
-        toast.success('Registration successful!');
+        toast.success('Регистрация успешна');
         router.push('/chat');
       } else {
-        toast.error(result.error || 'Registration failed');
+        toast.error(result.error || 'Ошибка регистрации');
       }
     } catch {
       setLoading(false);
-      toast.error('Registration failed');
+      toast.error('Ошибка регистрации');
     }
   };
 
+  // ------------------ Логин ------------------
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginLoading(true);
@@ -274,7 +279,7 @@ export default function RegistrationForm() {
         });
       }
 
-      toast.success('Login successful!');
+      toast.success('Вход успешен');
       setIsLoginModalOpen(false);
       router.push('/chat');
     } catch (err: unknown) {
@@ -286,17 +291,18 @@ export default function RegistrationForm() {
           setIsSubscriptionModalOpen(true);
         } else {
           setLoginError(
-            err.response?.data?.error || 'Login error. Check your email and password.'
+            err.response?.data?.error || 'Ошибка входа. Проверьте данные.'
           );
         }
       } else {
-        setLoginError('Login error. Check your email and password.');
+        setLoginError('Ошибка входа. Проверьте данные.');
       }
     } finally {
       setLoginLoading(false);
     }
   };
 
+  // ------------------ UI helpers ------------------
   const openLoginModal = () => {
     setIsLoginModalOpen(true);
     setLoginError(null);
