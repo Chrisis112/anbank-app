@@ -13,8 +13,6 @@ import {
   SystemProgram,
   Connection,
   LAMPORTS_PER_SOL,
-  // SerializeConfig,
-  VersionedTransaction,
 } from '@solana/web3.js';
 
 type Role = 'newbie' | 'advertiser' | 'creator';
@@ -62,11 +60,12 @@ export default function RegistrationForm() {
     return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
   };
 
-  // Универсальная функция для оплаты через Phantom для десктопа и мобильных устройств
+  // Функция оплаты через Phantom - одинаково для десктоп и мобильного браузера Phantom
   const handlePhantomPayment = async (): Promise<string | null> => {
     const provider = (window as any).solana;
+
     if (!provider || !provider.isPhantom) {
-      toast.error('Phantom Wallet не найден. Установите Phantom или откройте через мобильное приложение.');
+      toast.error('Phantom Wallet не найден. Пожалуйста, установите Phantom или используйте браузер с поддержкой Phantom.');
       return null;
     }
 
@@ -86,39 +85,13 @@ export default function RegistrationForm() {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
 
-      if (!isMobile()) {
-        // Десктоп: подпись транзакции через расширение и отправка
-        const signed = await provider.signTransaction(transaction);
-        const signature = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(signature, 'confirmed');
+      // Подписание и отправка транзакции одинаковы и для десктопа, и для мобильного Phantom браузера
+      const signed = await provider.signTransaction(transaction);
+      const signature = await connection.sendRawTransaction(signed.serialize());
+      await connection.confirmTransaction(signature, 'confirmed');
 
-        toast.success('✅ Payment successful!');
-        return signature;
-      } else {
-        // Мобильное устройство: используем deeplink для Phantom app с сериализацией транзакции
-
-        // Для Phantom Mobile необходимо подписать транзакцию в приложении Phantom,
-        // потому сначала сериализуем транзакцию в base64 и формируем ссылку
-        const serializedTx = transaction.serialize({
-          requireAllSignatures: false,
-          verifySignatures: false,
-        });
-        const base64Tx = serializedTx.toString('base64');
-
-        // Deeplink в формате
-        // phantom://transaction?transaction=<base64Tx>&callback=<callbackUrl>
-        // Где callbackUrl - URL вашего сайта, куда вернется пользователь после оплаты
-        const callbackUrl = encodeURIComponent(window.location.origin + '/payment-callback');
-
-        // Формируем deeplink для открытия Phantom mobile с передачей транзакции и callback
-        const deepLink = `https://phantom.app/ul/v1/transaction?transaction=${encodeURIComponent(base64Tx)}&callback=${callbackUrl}&title=${encodeURIComponent('Оплата CryptoChat')}`;
-
-        toast.info('Открываем приложение Phantom для оплаты...');
-        window.location.href = deepLink;
-
-        // Возвращаем null, так как подпись будет после возврата с callback URL
-        return null;
-      }
+      toast.success('✅ Payment successful!');
+      return signature;
     } catch (err) {
       toast.error('Оплата не удалась');
       return null;
@@ -130,22 +103,16 @@ export default function RegistrationForm() {
     let solanaPublicKey = null;
     let signature = null;
 
-    if (provider?.isPhantom && !isMobile()) {
-      // Десктоп версия
+    if (provider?.isPhantom) {
       solanaPublicKey = provider.publicKey?.toBase58();
       if (!solanaPublicKey) {
-        toast.error('Failed to get Phantom public key');
+        toast.error('Не удалось получить публичный ключ Phantom');
         return;
       }
       signature = await handlePhantomPayment();
       if (!signature) return;
-    } else if (isMobile()) {
-      // Мобильная версия - deeplink и уведомление
-      await handlePhantomPayment();
-      toast.info('Платеж откроется в приложении Phantom. Вернитесь на сайт после оплаты для продолжения.');
-      return;
     } else {
-      toast.error('Phantom Wallet not found');
+      toast.error('Phantom Wallet не найден');
       return;
     }
 
@@ -158,7 +125,7 @@ export default function RegistrationForm() {
           email: loginEmail,
         }
       );
-      toast.success('Subscription successfully renewed!');
+      toast.success('Подписка успешно продлена!');
       localStorage.setItem('token', data.token);
       setUser(data.user);
       setIsSubscriptionModalOpen(false);
@@ -167,7 +134,7 @@ export default function RegistrationForm() {
       toast.error(
         axios.isAxiosError(err) && err.response?.data?.error
           ? err.response.data.error
-          : 'Error renewing subscription'
+          : 'Ошибка при продлении подписки'
       );
     }
   };
@@ -198,11 +165,11 @@ export default function RegistrationForm() {
     e.preventDefault();
 
     if (!nickname || !email || !password || !confirmPassword) {
-      toast.error('Fill all fields');
+      toast.error('Заполните все поля');
       return;
     }
     if (password !== confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error('Пароли не совпадают');
       return;
     }
 
@@ -211,12 +178,12 @@ export default function RegistrationForm() {
     // Проверка уникальности email и никнейма
     const { emailExists, nicknameExists } = await checkUnique(email, nickname);
     if (emailExists) {
-      toast.error('Email is already in use');
+      toast.error('Email уже используется');
       setLoading(false);
       return;
     }
     if (nicknameExists) {
-      toast.error('Nickname is already in use');
+      toast.error('Никнейм уже используется');
       setLoading(false);
       return;
     }
@@ -237,33 +204,26 @@ export default function RegistrationForm() {
         setLoading(false);
 
         if (result.success) {
-          toast.success('Registration successful!');
+          toast.success('Регистрация успешна!');
           router.push('/chat');
         } else {
-          toast.error(result.error || 'Registration failed');
+          toast.error(result.error || 'Ошибка регистрации');
         }
         return;
       }
 
-      // Проводим оплату через Phantom Wallet
+      // Проводим оплату через Phantom Wallet (одинаково для десктопа и мобильного Phantom браузера)
       const paymentSignature = await handlePhantomPayment();
 
-      // Для мобильных устройств оплата не вернет сразу подпись
-      if (isMobile()) {
-        setLoading(false);
-        toast.info('После завершения оплаты в Phantom вернитесь для завершения регистрации.');
-        return;
-      }
-
       if (!paymentSignature) {
-        toast.error('Payment failed');
+        toast.error('Оплата не прошла');
         setLoading(false);
         return;
       }
 
       const solanaPublicKey = (window as any).solana?.publicKey?.toBase58();
       if (!solanaPublicKey) {
-        toast.error('Failed to get public key');
+        toast.error('Не удалось получить публичный ключ');
         setLoading(false);
         return;
       }
@@ -282,14 +242,14 @@ export default function RegistrationForm() {
       setLoading(false);
 
       if (result.success) {
-        toast.success('Registration successful!');
+        toast.success('Регистрация успешна!');
         router.push('/chat');
       } else {
-        toast.error(result.error || 'Registration failed');
+        toast.error(result.error || 'Ошибка регистрации');
       }
     } catch {
       setLoading(false);
-      toast.error('Registration failed');
+      toast.error('Ошибка регистрации');
     }
   };
 
@@ -322,23 +282,23 @@ export default function RegistrationForm() {
         });
       }
 
-      toast.success('Login successful!');
+      toast.success('Вход выполнен успешно!');
       setIsLoginModalOpen(false);
       router.push('/chat');
     } catch (err: unknown) {
       if (axios.isCancel(err)) {
-        // Request was cancelled
+        // Запрос отменён
       } else if (axios.isAxiosError(err)) {
         if (err.response?.data?.reason === 'subscription_inactive') {
           setIsLoginModalOpen(false);
           setIsSubscriptionModalOpen(true);
         } else {
           setLoginError(
-            err.response?.data?.error || 'Login error. Check your email and password.'
+            err.response?.data?.error || 'Ошибка входа. Проверьте email и пароль.'
           );
         }
       } else {
-        setLoginError('Login error. Check your email and password.');
+        setLoginError('Ошибка входа. Проверьте email и пароль.');
       }
     } finally {
       setLoginLoading(false);
