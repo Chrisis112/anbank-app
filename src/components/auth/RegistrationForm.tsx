@@ -39,70 +39,82 @@ export default function RegistrationForm() {
     setPromoCode(null);
     setPromoCodeError(message);
   };
-const handleRegisterSubmit = async (data: {
-  nickname: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-  role: Role;
-  promoCode: string | null;
-}) => {
-  setRegisterLoading(true);
 
-  try {
+    const onRegistrationSuccess = async (user: any, token: string) => {
+    localStorage.setItem('token', token);
+    setUser(user);
+    toast.success('Successful Register!');
+    try {
+      await router.push('/chat');
+    } catch (navError) {
+      console.error('Navigation error:', navError);
+      toast.error('Navigation error after registration');
+    }
+  };
+  const handleRegisterSubmit = async (data: {
+    nickname: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+    role: Role;
+    promoCode: string | null;
+  }) => {
     if (data.password !== data.confirmPassword) {
       toast.error('Password not match');
       return;
     }
 
-    const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
-
-    if (emailExists) {
-      toast.error('Email is already registered');
-      return;
-    }
-
-    if (nicknameExists) {
-      toast.error('Nickname is already used');
-      return;
-    }
-
-    // Преобразуем role в массив, как того ждёт сервер
-    const rolesArray = [data.role];
-
-    let result;
-
-    if (data.promoCode) {
-      result = await registerUser({
-        nickname: data.nickname,
-        email: data.email,
-        password: data.password,
-        role: rolesArray,
-        promoCode: data.promoCode,
-        solanaPublicKey: null,
-        paymentSignature: null,
-      });
-    } else {
-      if (!window.solana?.isPhantom) {
-        toast.info(
-          <>
-            For payment connect Phantom wallet:
-            <br />
-            <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
-              https://phantom.app/download
-            </a>
-          </>
-        );
+    try {
+      // Проверяем уникальность email и ника
+      const { emailExists, nicknameExists } = await checkUnique(data.email, data.nickname);
+      if (emailExists) {
+        toast.error('Email is already registered');
+        return;
+      }
+      if (nicknameExists) {
+        toast.error('Nickname is already used');
         return;
       }
 
-      if (!isConnected) {
-        toast.info('Connect Phantom Wallet for payment');
-        await connectWallet();
-        return;
-      }
+      const rolesArray = [data.role];
+      let result;
 
-      if (phantomWalletPublicKey) {
+      if (data.promoCode) {
+        // Регистрация с промокодом — без оплаты
+        result = await registerUser({
+          nickname: data.nickname,
+          email: data.email,
+          password: data.password,
+          role: rolesArray,
+          promoCode: data.promoCode,
+          solanaPublicKey: null,
+          paymentSignature: null,
+        });
+      } else {
+        // Регистрация с оплатой через Phantom Wallet
+        if (!window.solana?.isPhantom) {
+          toast.info(
+            <>
+              Для оплаты подключите Phantom Wallet:
+              <br />
+              <a href="https://phantom.app/download" target="_blank" rel="noreferrer" className="underline">
+                https://phantom.app/download
+              </a>
+            </>
+          );
+          return;
+        }
+        if (!isConnected) {
+          toast.info('Подключитесь к Phantom Wallet для оплаты');
+          await connectWallet();
+          return;
+        }
+        if (!phantomWalletPublicKey) {
+          toast.error('Phantom Wallet не подключен');
+          return;
+        }
+
+        // Обработка платежа — подпись транзакции и отправка
         const signature = await processPayment({ phantomWalletPublicKey });
 
         result = await registerUser({
@@ -114,34 +126,20 @@ const handleRegisterSubmit = async (data: {
           solanaPublicKey: phantomWalletPublicKey.toBase58(),
           paymentSignature: signature,
         });
+      }
+
+      console.log('Registration result:', result);
+
+      if (result && (result.success === true || result.user)) {
+        await onRegistrationSuccess(result.user, result.token);
       } else {
-        toast.error('Phantom Wallet Public Key is missing');
-        return;
+        toast.error(result.error || 'Registration error');
       }
+    } catch (error: any) {
+      console.error('Registration failed:', error);
+      toast.error(error?.message || 'Registration failed');
     }
-
-    console.log('Registration result:', result);
-
-    if (result && (result.success === true || result.user)) {
-      localStorage.setItem('token', result.token || '');
-      setUser(result.user);
-      toast.success('Successful Register!');
-      try {
-        await router.push('/chat');
-      } catch (navError) {
-        console.error('Navigation error:', navError);
-        toast.error('Navigation error after registration');
-      }
-    } else {
-      toast.error(result.error || 'Registration error');
-    }
-  } catch (error: any) {
-    console.error('Registration failed:', error);
-    toast.error(error?.message || 'Registration failed');
-  } finally {
-    setRegisterLoading(false);
-  }
-};
+  };
 
 
   const handleLoginSubmit = async (email: string, password: string) => {
