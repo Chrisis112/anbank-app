@@ -1,6 +1,12 @@
-// hooks/usePhantomPayment.ts
 import { useState, useCallback, useEffect } from 'react';
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, VersionedTransaction, TransactionMessage } from '@solana/web3.js';
+import {
+  Connection,
+  PublicKey,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+  VersionedTransaction,
+  TransactionMessage,
+} from '@solana/web3.js';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 
 const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
@@ -24,15 +30,15 @@ export const usePhantomPayment = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
-  
-  const { 
-    publicKey, 
-    sendTransaction, 
-    connected, 
-    signTransaction, 
+
+  const {
+    publicKey,
+    sendTransaction,
+    connected,
+    signTransaction,
     wallet,
     connecting,
-    disconnecting 
+    disconnecting,
   } = useWallet();
   const { connection } = useConnection();
 
@@ -47,27 +53,24 @@ export const usePhantomPayment = () => {
     checkMobileDevice();
   }, []);
 
-  // Создание оптимизированной транзакции для мобильных устройств
-  const createOptimizedTransaction = useCallback(async (
-    fromPubkey: PublicKey,
-    toPubkey: PublicKey,
-    amount: number,
-    connection: Connection
-  ): Promise<Transaction | VersionedTransaction> => {
-    
-    // Получаем актуальный blockhash с максимальной совместимостью
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash({
-      commitment: 'confirmed'
-    });
+  // Создание VersionedTransaction (оптимизированно для Phantom mobile)
+  const createOptimizedTransaction = useCallback(
+    async (
+      fromPubkey: PublicKey,
+      toPubkey: PublicKey,
+      amount: number,
+      connection: Connection
+    ): Promise<VersionedTransaction> => {
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash({
+        commitment: 'confirmed',
+      });
 
-    if (isMobileDevice) {
-      // Для мобильных используем VersionedTransaction (более совместим с MWA)
       const instructions = [
         SystemProgram.transfer({
           fromPubkey,
           toPubkey,
           lamports: Math.floor(amount * LAMPORTS_PER_SOL),
-        })
+        }),
       ];
 
       const messageV0 = new TransactionMessage({
@@ -77,220 +80,169 @@ export const usePhantomPayment = () => {
       }).compileToV0Message();
 
       return new VersionedTransaction(messageV0);
-    } else {
-      // Для браузера используем обычную Transaction
-      const transaction = new Transaction({
-        recentBlockhash: blockhash,
-        feePayer: fromPubkey,
-      });
+    },
+    []
+  );
 
-      const transferInstruction = SystemProgram.transfer({
-        fromPubkey,
-        toPubkey,
-        lamports: Math.floor(amount * LAMPORTS_PER_SOL),
-      });
+  // Отправка транзакции с поддержкой mobile signTransaction + sendRawTransaction
+  const sendOptimizedTransaction = useCallback(
+    async (
+      transaction: VersionedTransaction,
+      connection: Connection,
+      options: PaymentOptions = {}
+    ): Promise<string> => {
+      const { skipPreflight = false, commitment = 'confirmed', maxRetries = 3 } = options;
 
-      transaction.add(transferInstruction);
-      return transaction;
-    }
-  }, [isMobileDevice]);
-
-  // Отправка транзакции с учетом типа устройства
-  const sendOptimizedTransaction = useCallback(async (
-    transaction: Transaction | VersionedTransaction,
-    connection: Connection,
-    options: PaymentOptions = {}
-  ): Promise<string> => {
-    const {
-      skipPreflight = false,
-      commitment = 'confirmed',
-      maxRetries = 3
-    } = options;
-
-    try {
-      if (isMobileDevice) {
-        // Мобильная стратегия: используем sendTransaction с дополнительными опциями
-        return await sendTransaction(transaction as any, connection, {
-          skipPreflight,
-          preflightCommitment: commitment,
-          maxRetries,
-          // Дополнительные опции для мобильных устройств
-          minContextSlot: undefined,
-        });
-      } else {
-        // Браузерная стратегия
-        if (transaction instanceof VersionedTransaction) {
-          return await sendTransaction(transaction as any, connection, {
+      if (isMobileDevice && signTransaction) {
+        // Мобильная версия: подписываем и отправляем вручную
+        try {
+          const signedTx = await signTransaction(transaction as any);
+          const rawTx = signedTx.serialize();
+          const txid = await connection.sendRawTransaction(rawTx, {
             skipPreflight,
             preflightCommitment: commitment,
+            maxRetries,
           });
-        } else {
+          return txid;
+        } catch (error) {
+          console.error('Ошибка signTransaction/sendRawTransaction:', error);
+          throw error;
+        }
+      } else {
+        // Десктоп и браузерная версия
+        try {
           return await sendTransaction(transaction, connection, {
             skipPreflight,
             preflightCommitment: commitment,
+            maxRetries,
           });
+        } catch (error) {
+          console.error('Ошибка sendTransaction:', error);
+          throw error;
         }
       }
-    } catch (error: any) {
-      console.error('Ошибка отправки транзакции:', error);
-      
-      // Попытка альтернативного метода для мобильных устройств
-      if (isMobileDevice && signTransaction) {
-        console.log('Пробуем альтернативный метод подписания для мобильного...');
-        
-        try {
-          const signedTransaction = await signTransaction(transaction as Transaction);
-          return await connection.sendRawTransaction(
-            signedTransaction.serialize(),
-            {
-              skipPreflight,
-              preflightCommitment: commitment,
-              maxRetries,
-            }
+    },
+    [isMobileDevice, signTransaction, sendTransaction, connection]
+  );
+
+  // Основная функция оплаты
+  const processPayment = useCallback(
+    async (customOptions: PaymentOptions = {}): Promise<PaymentResult> => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        if (connecting || disconnecting) {
+          throw new Error('Кошелек в процессе подключения/отключения. Попробуйте позже.');
+        }
+
+        if (!connected || !publicKey) {
+          throw new Error('Кошелек не подключен. Пожалуйста, подключите кошелек.');
+        }
+
+        if (!RECEIVER_WALLET) {
+          throw new Error('Адрес получателя не настроен в переменных окружения.');
+        }
+
+        if (!wallet) {
+          throw new Error('Кошелек не инициализирован.');
+        }
+
+        const balance = await connection.getBalance(publicKey);
+        const requiredAmount = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
+        const estimatedFee = 5000; // примерная комиссия в lamports
+
+        if (balance < requiredAmount + estimatedFee) {
+          throw new Error(
+            `Недостаточно средств. Требуется: ${(requiredAmount + estimatedFee) / LAMPORTS_PER_SOL} SOL, доступно: ${balance / LAMPORTS_PER_SOL} SOL`
           );
-        } catch (altError: any) {
-          console.error('Альтернативный метод также не сработал:', altError);
-          throw new Error(`Не удалось отправить транзакцию: ${altError.message}`);
         }
-      }
-      
-      throw error;
-    }
-  }, [isMobileDevice, sendTransaction, signTransaction]);
 
-  const processPayment = useCallback(async (
-    customOptions: PaymentOptions = {}
-  ): Promise<PaymentResult> => {
-    setIsLoading(true);
-    setError(null);
+        const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
 
-    try {
-      // Проверки
-      if (connecting || disconnecting) {
-        throw new Error('Кошелек в процессе подключения/отключения. Попробуйте позже.');
-      }
-
-      if (!connected || !publicKey) {
-        throw new Error('Кошелек не подключен. Пожалуйста, подключите кошелек.');
-      }
-
-      if (!RECEIVER_WALLET) {
-        throw new Error('Адрес получателя не настроен в переменных окружения.');
-      }
-
-      if (!wallet) {
-        throw new Error('Кошелек не инициализирован.');
-      }
-
-      // Проверяем баланс
-      const balance = await connection.getBalance(publicKey);
-      const requiredAmount = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
-      const estimatedFee = 5000; // примерная комиссия в lamports
-
-      if (balance < requiredAmount + estimatedFee) {
-        throw new Error(
-          `Недостаточно средств. Требуется: ${(requiredAmount + estimatedFee) / LAMPORTS_PER_SOL} SOL, доступно: ${balance / LAMPORTS_PER_SOL} SOL`
+        const transaction = await createOptimizedTransaction(
+          publicKey,
+          receiverPublicKey,
+          SOL_AMOUNT,
+          connection
         );
-      }
 
-      console.log(`Обработка платежа на ${isMobileDevice ? 'мобильном' : 'десктоп'} устройстве...`);
+        const signature = await sendOptimizedTransaction(transaction, connection, {
+          skipPreflight: false,
+          commitment: 'confirmed',
+          maxRetries: 5,
+          ...customOptions,
+        });
 
-      // Создаем получателя
-      const receiverPublicKey = new PublicKey(RECEIVER_WALLET);
+        const latestBlockhash = await connection.getLatestBlockhash('confirmed');
 
-      // Создаем оптимизированную транзакцию
-      const transaction = await createOptimizedTransaction(
-        publicKey,
-        receiverPublicKey,
-        SOL_AMOUNT,
-        connection
-      );
+        const confirmation = await connection.confirmTransaction(
+          {
+            signature,
+            blockhash: latestBlockhash.blockhash,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+          },
+          'confirmed'
+        );
 
-      console.log('Транзакция создана, отправляем...');
-
-      // Отправляем транзакцию
-      const signature = await sendOptimizedTransaction(transaction, connection, {
-        skipPreflight: false,
-        commitment: 'confirmed',
-        maxRetries: 5,
-        ...customOptions,
-      });
-
-      console.log('Транзакция отправлена, подпись:', signature);
-
-      // Получаем blockhash для подтверждения
-      const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-
-      // Подтверждаем транзакцию
-      const confirmation = await connection.confirmTransaction(
-        {
-          signature,
-          blockhash: latestBlockhash.blockhash,
-          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-        },
-        'confirmed'
-      );
-
-      if (confirmation.value.err) {
-        throw new Error(`Транзакция отклонена сетью: ${JSON.stringify(confirmation.value.err)}`);
-      }
-
-      console.log('Транзакция подтверждена успешно!');
-
-      return {
-        signature,
-        success: true,
-        txHash: signature,
-      };
-
-    } catch (err: any) {
-      let errorMessage = 'Неизвестная ошибка при обработке платежа';
-      
-      // Обработка специфических ошибок
-      if (err.message) {
-        if (err.message.includes('User rejected')) {
-          errorMessage = 'Пользователь отклонил транзакцию';
-        } else if (err.message.includes('Signature verification failed')) {
-          errorMessage = 'Ошибка подписи транзакции. Попробуйте переподключить кошелек.';
-        } else if (err.message.includes('insufficient funds')) {
-          errorMessage = 'Недостаточно средств для совершения транзакции';
-        } else if (err.message.includes('Missing signature')) {
-          errorMessage = 'Ошибка подписания транзакции. Убедитесь, что кошелек разблокирован.';
-        } else if (err.message.includes('Network request failed') || err.message.includes('timeout')) {
-          errorMessage = 'Проблема с сетевым соединением. Попробуйте еще раз.';
-        } else {
-          errorMessage = err.message;
+        if (confirmation.value.err) {
+          throw new Error(`Транзакция отклонена сетью: ${JSON.stringify(confirmation.value.err)}`);
         }
+
+        return {
+          signature,
+          success: true,
+          txHash: signature,
+        };
+      } catch (err: any) {
+        let errorMessage = 'Неизвестная ошибка при обработке платежа';
+
+        if (err.message) {
+          if (err.message.includes('User rejected')) {
+            errorMessage = 'Пользователь отклонил транзакцию';
+          } else if (err.message.includes('Signature verification failed')) {
+            errorMessage = 'Ошибка подписи транзакции. Попробуйте переподключить кошелек.';
+          } else if (err.message.includes('insufficient funds')) {
+            errorMessage = 'Недостаточно средств для совершения транзакции';
+          } else if (err.message.includes('Missing signature')) {
+            errorMessage = 'Ошибка подписания транзакции. Убедитесь, что кошелек разблокирован.';
+          } else if (err.message.includes('Network request failed') || err.message.includes('timeout')) {
+            errorMessage = 'Проблема с сетевым соединением. Попробуйте еще раз.';
+          } else {
+            errorMessage = err.message;
+          }
+        }
+
+        setError(errorMessage);
+        console.error('Детали ошибки платежа:', {
+          error: err,
+          message: err.message,
+          stack: err.stack,
+          isMobile: isMobileDevice,
+          wallet: wallet?.adapter?.name,
+        });
+
+        return {
+          signature: null,
+          success: false,
+          error: errorMessage,
+        };
+      } finally {
+        setIsLoading(false);
       }
-
-      setError(errorMessage);
-      console.error('Детали ошибки платежа:', {
-        error: err,
-        message: err.message,
-        stack: err.stack,
-        isMobile: isMobileDevice,
-        wallet: wallet?.adapter?.name,
-      });
-
-      return {
-        signature: null,
-        success: false,
-        error: errorMessage,
-      };
-    } finally {
-      setIsLoading(false);
-    }
-  }, [
-    publicKey,
-    connected,
-    connecting,
-    disconnecting,
-    wallet,
-    connection,
-    createOptimizedTransaction,
-    sendOptimizedTransaction,
-    isMobileDevice
-  ]);
+    },
+    [
+      publicKey,
+      connected,
+      connecting,
+      disconnecting,
+      wallet,
+      connection,
+      createOptimizedTransaction,
+      sendOptimizedTransaction,
+      isMobileDevice,
+    ]
+  );
 
   return {
     processPayment,
