@@ -99,45 +99,61 @@ export default function RegistrationForm() {
   };
 
   const handleRenewSubscription = async () => {
-    const provider = (window as any).solana;
-    let solanaPublicKey = null;
-    let signature = null;
+  const provider = (window as any).solana;
+  let solanaPublicKey = null;
+  let signature = null;
 
-    if (provider?.isPhantom) {
+  if (provider?.isPhantom) {
+    try {
+      await provider.connect();
       solanaPublicKey = provider.publicKey?.toBase58();
       if (!solanaPublicKey) {
-        toast.error('Failed to get Phantoms public key');
+        toast.error('Failed to get Phantom\'s public key');
         return;
       }
       signature = await handlePhantomPayment();
-      if (!signature) return;
-    } else {
-      toast.error('Phantom Wallet не найден');
+      if (!signature) {
+        toast.error('Payment failed');
+        return;
+      }
+    } catch (err) {
+      toast.error('Failed to connect to Phantom Wallet');
       return;
     }
+  } else {
+    toast.error('Phantom Wallet not found');
+    return;
+  }
 
-    try {
-      const { data } = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
-        {
-          txSignature: signature,
-          solanaPublicKey,
-          email: loginEmail,
-        }
-      );
-      toast.success('Subscription successfully renewed!');
-      localStorage.setItem('token', data.token);
-      setUser(data.user);
-      setIsSubscriptionModalOpen(false);
-      router.push('/chat');
-    } catch (err) {
-      toast.error(
-        axios.isAxiosError(err) && err.response?.data?.error
-          ? err.response.data.error
-          : 'Error renewing subscription'
-      );
-    }
-  };
+  if (!loginEmail) {
+    toast.error('Email is required for renewing subscription');
+    return;
+  }
+
+  try {
+    const { data } = await axios.post(
+      `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
+      {
+        txSignature: signature,
+        solanaPublicKey,
+        email: loginEmail,
+      }
+    );
+    toast.success('Subscription successfully renewed!');
+    localStorage.setItem('token', data.token);
+    setUser(data.user);
+    setIsSubscriptionModalOpen(false);
+    router.push('/chat');
+  } catch (err) {
+    console.error('Renew subscription error:', err);
+    toast.error(
+      axios.isAxiosError(err) && err.response?.data?.error
+        ? err.response.data.error
+        : 'Error renewing subscription'
+    );
+  }
+};
+
 
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
