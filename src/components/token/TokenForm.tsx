@@ -29,32 +29,32 @@ export default function TokenForm({
   return (
     <>
       <div>
-        <label>Название токена *</label>
+        <label>Token name *</label>
         <input type="text" name="name" value={formData.name} onChange={onChange} maxLength={32} disabled={disabled} />
       </div>
       <div>
-        <label>Символ токена *</label>
+        <label>Token symbol *</label>
         <input type="text" name="symbol" value={formData.symbol} onChange={onChange} maxLength={10} disabled={disabled} />
       </div>
       <div>
-        <label>Описание</label>
+        <label>Description</label>
         <textarea name="description" value={formData.description} onChange={onChange} disabled={disabled} />
       </div>
       <div>
-        <label>Общее количество *</label>
+        <label>Total quantity *</label>
         <input type="number" name="supply" value={formData.supply} onChange={onChange} min="1" disabled={disabled} />
       </div>
       <div>
-        <label>Десятичные знаки</label>
+        <label>Decimal places</label>
         <select name="decimals" value={formData.decimals} onChange={onChange} disabled={disabled}>
-          <option value={0}>0 (целые числа)</option>
-          <option value={2}>2 (как доллары)</option>
-          <option value={6}>6 (стандарт)</option>
-          <option value={9}>9 (как SOL)</option>
+          <option value={0}>0 (integers)</option>
+          <option value={2}>2 (like dollars)</option>
+          <option value={6}>6 (standart)</option>
+          <option value={9}>9 (like SOL)</option>
         </select>
       </div>
       <div>
-        <label>Изображение токена</label>
+        <label>Token image</label>
         <input type="file" accept="image/*" onChange={onImageChange} disabled={disabled} />
       </div>
       <button onClick={createToken} disabled={disabled || walletBalance < 0.05}>

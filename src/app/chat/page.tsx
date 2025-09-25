@@ -493,7 +493,7 @@ const isAdmin = user?.role?.includes('admin') ?? false;
               className="w-full flex items-center justify-center gap-3 px-3 py-3 rounded-lg bg-gradient-to-r from-crypto-accent to-blue-500 text-crypto-dark font-orbitron text-lg font-semibold transition hover:opacity-90"
             >
               <FaCoins className="text-crypto-dark" />
-              Создать токен
+              Create a token
             </button>
 
             <button
@@ -508,7 +508,7 @@ const isAdmin = user?.role?.includes('admin') ?? false;
         ) : (
           <>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-orbitron font-bold text-crypto-accent">Создание токена</h3>
+              <h3 className="text-xl font-orbitron font-bold text-crypto-accent">Token creation</h3>
               <button
                 onClick={() => setShowTokenCreator(false)}
                 className="p-2 text-gray-400 hover:text-white transition"
@@ -519,7 +519,7 @@ const isAdmin = user?.role?.includes('admin') ?? false;
 
             <TokenCreator
               onTokenCreated={address => {
-                alert(`Токен успешно создан!\nАдрес: ${address}`);
+                alert(`The token has been successfully created!\nАдрес: ${address}`);
                 setShowTokenCreator(false);
               }}
             />

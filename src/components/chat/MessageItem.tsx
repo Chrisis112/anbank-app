@@ -80,7 +80,7 @@ export default function MessageItem({
         <div
           className="flex-shrink-0 cursor-pointer hover:scale-110 transition"
           onClick={handleAvatarClick}
-          title={`Открыть личный чат с ${sender?.nickname ?? 'пользователем'}`}
+          title={`Открыть личный чат с ${sender?.nickname ?? 'user'}`}
         >
           <div className="relative w-10 h-10 inline-block">
             <img

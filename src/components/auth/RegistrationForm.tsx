@@ -65,7 +65,7 @@ export default function RegistrationForm() {
     const provider = (window as any).solana;
 
     if (!provider || !provider.isPhantom) {
-      toast.error('Phantom Wallet не найден. Пожалуйста, установите Phantom или используйте браузер с поддержкой Phantom.');
+      toast.error('Phantom Wallet not found. Please install Phantom or use a Phantom-enabled browser.');
       return null;
     }
 
@@ -93,7 +93,7 @@ export default function RegistrationForm() {
       toast.success('✅ Payment successful!');
       return signature;
     } catch (err) {
-      toast.error('Оплата не удалась');
+      toast.error('Payment failed');
       return null;
     }
   };
@@ -106,7 +106,7 @@ export default function RegistrationForm() {
     if (provider?.isPhantom) {
       solanaPublicKey = provider.publicKey?.toBase58();
       if (!solanaPublicKey) {
-        toast.error('Не удалось получить публичный ключ Phantom');
+        toast.error('Failed to get Phantoms public key');
         return;
       }
       signature = await handlePhantomPayment();
@@ -125,7 +125,7 @@ export default function RegistrationForm() {
           email: loginEmail,
         }
       );
-      toast.success('Подписка успешно продлена!');
+      toast.success('Subscription successfully renewed!');
       localStorage.setItem('token', data.token);
       setUser(data.user);
       setIsSubscriptionModalOpen(false);
@@ -134,7 +134,7 @@ export default function RegistrationForm() {
       toast.error(
         axios.isAxiosError(err) && err.response?.data?.error
           ? err.response.data.error
-          : 'Ошибка при продлении подписки'
+          : 'Error renewing subscription'
       );
     }
   };
@@ -165,11 +165,11 @@ export default function RegistrationForm() {
     e.preventDefault();
 
     if (!nickname || !email || !password || !confirmPassword) {
-      toast.error('Заполните все поля');
+      toast.error('Please fill in all fields');
       return;
     }
     if (password !== confirmPassword) {
-      toast.error('Пароли не совпадают');
+      toast.error('The passwords dont match');
       return;
     }
 
@@ -178,12 +178,12 @@ export default function RegistrationForm() {
     // Проверка уникальности email и никнейма
     const { emailExists, nicknameExists } = await checkUnique(email, nickname);
     if (emailExists) {
-      toast.error('Email уже используется');
+      toast.error('Email is already in use');
       setLoading(false);
       return;
     }
     if (nicknameExists) {
-      toast.error('Никнейм уже используется');
+      toast.error('The nickname is already in use');
       setLoading(false);
       return;
     }
@@ -204,10 +204,10 @@ export default function RegistrationForm() {
         setLoading(false);
 
         if (result.success) {
-          toast.success('Регистрация успешна!');
+          toast.success('Registration successful!');
           router.push('/chat');
         } else {
-          toast.error(result.error || 'Ошибка регистрации');
+          toast.error(result.error || 'Registration error');
         }
         return;
       }
@@ -216,14 +216,14 @@ export default function RegistrationForm() {
       const paymentSignature = await handlePhantomPayment();
 
       if (!paymentSignature) {
-        toast.error('Оплата не прошла');
+        toast.error('Payment failed');
         setLoading(false);
         return;
       }
 
       const solanaPublicKey = (window as any).solana?.publicKey?.toBase58();
       if (!solanaPublicKey) {
-        toast.error('Не удалось получить публичный ключ');
+        toast.error('Failed to get public key');
         setLoading(false);
         return;
       }
@@ -242,14 +242,14 @@ export default function RegistrationForm() {
       setLoading(false);
 
       if (result.success) {
-        toast.success('Регистрация успешна!');
+        toast.success('Registration successful!');
         router.push('/chat');
       } else {
-        toast.error(result.error || 'Ошибка регистрации');
+        toast.error(result.error || 'Registration error');
       }
     } catch {
       setLoading(false);
-      toast.error('Ошибка регистрации');
+      toast.error('Registration error');
     }
   };
 

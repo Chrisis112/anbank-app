@@ -53,7 +53,7 @@ export default function CreatePostForm({
 
     const handleNewPost = (post: any) => {
       if (post.author === user?.nickname) {
-        toast.success("Пост успешно создан!");
+        toast.success("The post has been successfully created.!");
         onClose(); // Закрываем форму только при успешном создании
       }
     };
@@ -87,12 +87,12 @@ export default function CreatePostForm({
   if (!user) return;
 
   if (!title || !content) {
-    toast.error("Пожалуйста, заполните все обязательные поля");
+    toast.error("Please fill in all required fields.");
     return;
   }
 
   if (!mainPhoto && !mainPhotoUrl && !initialData?.id) {
-    toast.error("Главное фото обязательно");
+    toast.error("The main photo is required");
     return;
   }
   setCreating(true);
@@ -122,7 +122,7 @@ export default function CreatePostForm({
       await axios.patch(`${API}/forum/posts/${initialData.id}`, payload, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
-      toast.success("Пост обновлен");
+      toast.success("The post has been updated.");
       onSuccess();
       onClose(); // закрываем при обновлении сразу
       setCreating(false); // ✅ ИСПРАВЛЕНИЕ: Разблокируем кнопку
@@ -140,14 +140,14 @@ export default function CreatePostForm({
       await axios.post(`${API}/forum/posts`, payload, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
-      toast.success("Пост создан");
+      toast.success("The post has been created.");
       onSuccess();
       onClose(); // закрываем при успешном https запросе
       setCreating(false);
     }
   } catch (err: any) {
     // Обработка ошибки HTTP запроса
-    const errorMessage = err.response?.data?.error || "Ошибка при сохранении";
+    const errorMessage = err.response?.data?.error || "Saving error";
     toast.error(errorMessage);
     setCreating(false); // ✅ Разблокируем кнопку при ошибке
   }
@@ -179,7 +179,7 @@ export default function CreatePostForm({
 
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl mx-auto p-8 bg-gradient-to-br rounded-lg shadow-lg max-h-[90vh] overflow-auto">
-      <h2 className="text-2xl mb-4 text-white">{initialData ? "Редактировать пост" : "Создать пост"}</h2>
+      <h2 className="text-2xl mb-4 text-white">{initialData ? "Edit post" : "Create a post"}</h2>
 
       <input
         type="text"
@@ -200,7 +200,7 @@ export default function CreatePostForm({
       />
 
       <div className="mb-4">
-        <label className="block mb-2 text-white">Main Photo {initialData ? "(необязательно)" : "(обязательно)"}</label>
+        <label className="block mb-2 text-white">Main Photo {initialData ? "(optional)" : "(necessarily)"}</label>
         <input type="file" accept="image/*" onChange={handleMainPhotoChange} required={!initialData?.id} />
         {mainPhoto ? (
           <img src={URL.createObjectURL(mainPhoto)} alt="preview" className="mt-2 max-h-32 rounded" />
