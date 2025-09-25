@@ -98,7 +98,7 @@ function usePhantomWallet() {
 
   const connectWallet = useCallback(async () => {
     if (typeof window === 'undefined' || !window.solana?.isPhantom) {
-      throw new Error('Phantom Wallet не установлен');
+      throw new Error('Phantom Wallet not installed');
     }
     try {
       setIsConnecting(true);
@@ -107,7 +107,7 @@ function usePhantomWallet() {
         setPhantomWallet(window.solana);
       }
     } catch (error) {
-      console.error('Ошибка подключения к Phantom:', error);
+      console.error('error connecting to Phantom:', error);
       throw error;
     } finally {
       setIsConnecting(false);
@@ -120,7 +120,7 @@ function usePhantomWallet() {
         await phantomWallet.disconnect();
         setPhantomWallet(null);
       } catch (error) {
-        console.error('Ошибка отключения:', error);
+        console.error('disconnecting error:', error);
       }
     }
   }, [phantomWallet]);
@@ -148,27 +148,27 @@ interface TokenFormData {
 function TokenPreview({ data }: { data: TokenFormData }) {
   return (
     <div className="p-4 bg-gray-900 rounded-lg border border-blue-600 text-white max-w-md">
-      <h3 className="mb-4 font-semibold text-xl">Пример вашего токена</h3>
+      <h3 className="mb-4 font-semibold text-xl">Example of your token</h3>
       <div className="mb-2">
-        <strong>Название:</strong> {data.name || '(пусто)'}
+        <strong>Name:</strong> {data.name || '(пусто)'}
       </div>
       <div className="mb-2">
-        <strong>Символ:</strong> {data.symbol || '(пусто)'}
+        <strong>Symbol:</strong> {data.symbol || '(пусто)'}
       </div>
       <div className="mb-2">
-        <strong>Описание:</strong> {data.description || '(пусто)'}
+        <strong>discription:</strong> {data.description || '(пусто)'}
       </div>
       <div className="mb-2">
-        <strong>Общее количество:</strong> {data.supply || '(пусто)'}
+        <strong>Total token quantity:</strong> {data.supply || '(пусто)'}
       </div>
       <div className="mb-2">
-        <strong>Десятичные знаки:</strong> {data.decimals}
+        <strong>Decimal places:</strong> {data.decimals}
       </div>
       {data.imageFile && (
         <div className="mt-4">
           <img
             src={URL.createObjectURL(data.imageFile)}
-            alt="Превью токена"
+            alt="Token preview"
             className="w-32 h-32 object-cover rounded-lg border border-blue-600"
           />
         </div>
@@ -208,7 +208,7 @@ export default function TokenCreator({ onTokenCreated }: { onTokenCreated?: (tok
           const balance = await connection.getBalance(phantomWallet.publicKey);
           setWalletBalance(balance / LAMPORTS_PER_SOL);
         } catch (error) {
-          console.error('Ошибка получения баланса:', error);
+          console.error('Error getting balance:', error);
         }
       }
     };
@@ -231,10 +231,10 @@ export default function TokenCreator({ onTokenCreated }: { onTokenCreated?: (tok
   };
 
   async function payCommission() {
-    if (!phantomWallet?.publicKey) throw new Error('Подключите кошелек');
+    if (!phantomWallet?.publicKey) throw new Error('Connect your wallet');
 
     const receiverAddress = process.env.NEXT_PUBLIC_RECEIVER_WALLET;
-    if (!receiverAddress) throw new Error('Не задан адрес получателя комиссии');
+    if (!receiverAddress) throw new Error('The commission recipients address is not specified.');
 
     const commissionReceiver = new PublicKey(receiverAddress);
 
@@ -261,26 +261,26 @@ export default function TokenCreator({ onTokenCreated }: { onTokenCreated?: (tok
 
   async function createToken() {
     if (!phantomWallet?.publicKey) {
-      alert('Пожалуйста, подключите Phantom кошелек');
+      alert('Please connect Phantom wallet');
       return;
     }
     if (!formData.name || !formData.symbol || !formData.supply) {
-      alert('Пожалуйста, заполните обязательные поля: название, символ и количество');
+      alert('Please fill in the required fields: name, symbol and quantity');
       return;
     }
     if (walletBalance < commissionInSol + 0.05) {
       alert(
-        `Недостаточно SOL для оплаты комиссии и создания токена.\nВаш баланс: ${walletBalance.toFixed(
+        `Not enough SOL to pay the fee and create the token.\nYour ballance: ${walletBalance.toFixed(
           4
-        )} SOL\nМинимум нужно: ${(commissionInSol + 0.05).toFixed(4)} SOL (комиссия + создание).`
+        )} SOL\nminimum needed: ${(commissionInSol + 0.05).toFixed(4)} SOL (commission + creation).`
       );
       return;
     }
 
     const userConfirmed = window.confirm(
-      `Для создания токена необходимо оплатить комиссию в размере ${commissionInSol.toFixed(
+      `To create a token, you must pay a fee of ${commissionInSol.toFixed(
         6
-      )} SOL.\nЭто примерно соответствует 3 USD (реальное значение зависит от курса).\n\nПродолжить и оплатить комиссию?`
+      )} SOL.\nThis is approximately equivalent to 3 USD (the actual value depends on the exchange rate).\n\nContinue and pay the commission?`
     );
     if (!userConfirmed) {
       return;
@@ -290,13 +290,13 @@ export default function TokenCreator({ onTokenCreated }: { onTokenCreated?: (tok
 
     try {
       const commissionTxId = await payCommission();
-      console.log('Комиссия оплачена, txid:', commissionTxId);
+      console.log('The commission has been paid, txid:', commissionTxId);
 
       const clusterUrl = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.devnet.solana.com';
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const token = localStorage.getItem('token');
       if (!token) {
-        alert('Не найден токен авторизации, пожалуйста войдите в систему.');
+        alert('Authorization token not found, please log in.');
         setIsCreating(false);
         return;
       }
@@ -324,7 +324,7 @@ export default function TokenCreator({ onTokenCreated }: { onTokenCreated?: (tok
           });
           imageUri = uploadUrl.split('?')[0];
         } catch (error) {
-          console.error('Ошибка загрузки изображения:', error);
+          console.error('Error loading image:', error);
         }
       }
 
@@ -354,7 +354,7 @@ export default function TokenCreator({ onTokenCreated }: { onTokenCreated?: (tok
         amount: supply,
       });
 
-      console.log('Отправка транзакции создания токена...');
+      console.log('Sending a token creation transaction...');
 
       const tx = await createFungibleIx
         .add(createTokenIx)
@@ -368,13 +368,13 @@ export default function TokenCreator({ onTokenCreated }: { onTokenCreated?: (tok
       setWalletBalance(newBalance / LAMPORTS_PER_SOL);
 
       alert(
-        `Токен успешно создан!\n\nАдрес mint: ${mintSigner.publicKey}\nВы получили ${formData.supply} ${formData.symbol} токенов\n\nОбновленный баланс: ${(
+        `Token successfully created!\n\n mint adress: ${mintSigner.publicKey}\nYou received ${formData.supply} ${formData.symbol} tokens\n\nUpdated balance: ${(
           newBalance / LAMPORTS_PER_SOL
-        ).toFixed(4)} SOL\n\nПосмотреть транзакцию:\nhttps://explorer.solana.com/tx/${signature}?cluster=${clusterUrl.includes(
+        ).toFixed(4)} SOL\n\nView transaction:\nhttps://explorer.solana.com/tx/${signature}?cluster=${clusterUrl.includes(
           'devnet'
         )
           ? 'devnet'
-          : 'mainnet'}\n\nПосмотреть токен:\nhttps://explorer.solana.com/address/${mintSigner.publicKey}?cluster=${clusterUrl.includes(
+          : 'mainnet'}\n\nView token:\nhttps://explorer.solana.com/address/${mintSigner.publicKey}?cluster=${clusterUrl.includes(
           'devnet'
         )
           ? 'devnet'
@@ -397,8 +397,8 @@ export default function TokenCreator({ onTokenCreated }: { onTokenCreated?: (tok
       setImagePreview(null);
     } catch (error: any) {
       if (axios.isAxiosError(error)) {
-        console.error('Ошибка axios:', error.response?.status, error.response?.data);
-        alert(`Ошибка создания токена: ${error.response?.data?.error || error.message}`);
+        console.error('axios error:', error.response?.status, error.response?.data);
+        alert(`Error creating token: ${error.response?.data?.error || error.message}`);
       } else {
       }
     } finally {
@@ -419,7 +419,7 @@ return (
   <div className="p-6 bg-crypto-dark rounded-lg border border-crypto-accent">
     <div className="flex items-center gap-3 mb-6">
       <FaCoins className="text-crypto-accent text-2xl" />
-      <h2 className="text-2xl font-orbitron font-bold text-white">Создать токен</h2>
+      <h2 className="text-2xl font-orbitron font-bold text-white">Create a token</h2>
     </div>
 
     {!isConnected ? (
@@ -434,22 +434,22 @@ return (
       <>
         <div className="mb-4 p-3 bg-gray-800 rounded-lg">
           <div className="mb-2">
-            <span className="text-white text-sm">Подключено к сети: </span>
+            <span className="text-white text-sm">Connected to the network: </span>
             <span className="text-highlight font-semibold">{networkName}</span>
           </div>
           <p className="text-white text-sm">
-            Адрес кошелька:{' '}
+            Wallet address:{' '}
             <span className="font-mono text-xs">
               {phantomWallet?.publicKey?.toString().slice(0, 8)}...
               {phantomWallet?.publicKey?.toString().slice(-8)}
             </span>
           </p>
           <p className="text-white text-sm">
-            Баланс кошелька:{' '}
+            Wallet balance:{' '}
             <span className="font-bold">{walletBalance.toFixed(4)} SOL</span>
             {walletBalance < commissionInSol + 0.05 && (
               <span className="block text-red-400 mt-1">
-                ⚠️ Рекомендуется иметь минимум {(commissionInSol + 0.05).toFixed(4)} SOL для оплаты комиссии и создания токена
+                ⚠️ It is recommended to have a minimum {(commissionInSol + 0.05).toFixed(4)} SOL to pay the commission and create a token
               </span>
             )}
           </p>
@@ -459,7 +459,7 @@ return (
           onClick={disconnectWallet}
           className="mb-4 w-full py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
         >
-          Отключить кошелек
+          Disconnect wallet
         </button>
 
         {/* Кнопка для открытия предпросмотра */}
@@ -468,12 +468,12 @@ return (
           className="mb-6 w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:opacity-90 transition-all duration-200 flex items-center justify-center gap-2"
         >
           <FaEye />
-          Предпросмотр токена
+          Token preview
         </button>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-white font-semibold mb-2">Название токена *</label>
+            <label className="block text-white font-semibold mb-2">Token name *</label>
             <input
               type="text"
               name="name"
@@ -486,7 +486,7 @@ return (
           </div>
 
           <div>
-            <label className="block text-white font-semibold mb-2">Символ токена *</label>
+            <label className="block text-white font-semibold mb-2">Token symbol *</label>
             <input
               type="text"
               name="symbol"
@@ -499,7 +499,7 @@ return (
           </div>
 
           <div>
-            <label className="block text-white font-semibold mb-2">Описание</label>
+            <label className="block text-white font-semibold mb-2">Description</label>
             <textarea
               name="description"
               value={formData.description}
@@ -511,7 +511,7 @@ return (
           </div>
 
           <div>
-            <label className="block text-white font-semibold mb-2">Общее количество *</label>
+            <label className="block text-white font-semibold mb-2">Total quantity *</label>
             <input
               type="number"
               name="supply"
@@ -524,22 +524,22 @@ return (
           </div>
 
           <div>
-            <label className="block text-white font-semibold mb-2">Десятичные знаки</label>
+            <label className="block text-white font-semibold mb-2">Decimal places</label>
             <select
               name="decimals"
               value={formData.decimals}
               onChange={handleInputChange}
               className="w-full p-3 rounded-lg bg-crypto-input border border-crypto-accent text-white focus:ring-2 focus:ring-crypto-accent focus:border-transparent"
             >
-              <option value={0}>0 (целые числа)</option>
-              <option value={2}>2 (как доллары)</option>
-              <option value={6}>6 (стандарт)</option>
-              <option value={9}>9 (как SOL)</option>
+              <option value={0}>0 (integers)</option>
+              <option value={2}>2 (like dollars)</option>
+              <option value={6}>6 (standart)</option>
+              <option value={9}>9 (like SOL)</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-white font-semibold mb-2">Изображение токена</label>
+            <label className="block text-white font-semibold mb-2">Token image</label>
             <input
               type="file"
               accept="image/*"
@@ -550,7 +550,7 @@ return (
               <div className="mt-3">
                 <img
                   src={imagePreview}
-                  alt="Предпросмотр"
+                  alt="Preview"
                   className="w-32 h-32 object-cover rounded-lg border border-crypto-accent"
                 />
               </div>
@@ -565,14 +565,14 @@ return (
             {isCreating ? (
               <>
                 <FaSpinner className="animate-spin" />
-                Создание токена...
+                Creating a token...
               </>
             ) : walletBalance < 0.02 ? (
               'Недостаточно SOL'
             ) : (
               <>
                 <FaCoins />
-                Создать токен
+                Create a token
               </>
             )}
           </button>
@@ -593,7 +593,7 @@ return (
                 {/* Заголовок модального окна */}
                 <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 sm:p-5 flex-shrink-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg sm:text-xl font-bold text-white">Ваш токен</h3>
+                    <h3 className="text-lg sm:text-xl font-bold text-white">Your token</h3>
                     <button
                       onClick={() => setIsPreviewOpen(false)}
                       className="p-1.5 sm:p-2 hover:bg-white/20 rounded-full transition-colors"
@@ -619,7 +619,7 @@ return (
                   {/* Основная информация */}
                   <div className="text-center mb-4 sm:mb-5">
                     <h4 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">
-                      {formData.name || 'Название не указано'}
+                      {formData.name || 'Name not specified'}
                     </h4>
                     <p className="text-base sm:text-lg text-gray-500 font-mono">
                       {formData.symbol || 'СИМВОЛ'}
@@ -636,7 +636,7 @@ return (
                   {/* Детали токена */}
                   <div className="space-y-3 sm:space-y-4">
                     <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                      <span className="text-sm sm:text-base text-gray-600">Общее количество:</span>
+                      <span className="text-sm sm:text-base text-gray-600">Total number:</span>
                       <span className="text-sm sm:text-base font-semibold text-gray-800">
                         {formData.supply ? Number(formData.supply).toLocaleString() : '0'}
                       </span>
@@ -644,7 +644,7 @@ return (
 
                     <div className="py-2">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm sm:text-base text-gray-600">Десятичные знаки:</span>
+                        <span className="text-sm sm:text-base text-gray-600">Decimal places:</span>
                         <span className="text-sm sm:text-base font-semibold text-gray-800">{formData.decimals}</span>
                       </div>
                       
@@ -653,26 +653,26 @@ return (
                         <p className="text-xs sm:text-sm text-blue-800">
                           {Number(formData.decimals) === 0 && (
                             <>
-                              <strong>Целые числа:</strong> Ваш токен нельзя делить. Например: 1, 5, 100 токенов. 
-                              Подходит для NFT или билетов.
+                              <strong>Integers:</strong> Your token cannot be divided. For example: 1, 5, or 100 tokens.
+Suitable for NFTs or tickets.
                             </>
                           )}
                           {Number(formData.decimals) === 2 && (
                             <>
-                              <strong>Как доллары:</strong> Ваш токен можно делить до 2 знаков. Например: 1.50, 99.99 токенов. 
-                              Подходит для stablecoin или валютных токенов.
+                              <strong>Like dollars:</strong> Your token can be divided by up to two decimal places. For example: 1.50, 99.99 tokens.
+Suitable for stablecoins or fiat tokens..
                             </>
                           )}
                           {Number(formData.decimals) === 6 && (
                             <>
-                              <strong>Стандартная точность:</strong> Ваш токен можно делить до 6 знаков. Например: 0.000001 токена. 
-                              Самый популярный выбор для большинства токенов.
+                              <strong>Standard accuracy:</strong> Your token can be divided by up to 6 digits. For example: 0.000001 tokens.
+The most popular choice for most tokens.
                             </>
                           )}
                           {Number(formData.decimals) === 9 && (
                             <>
-                              <strong>Высокая точность:</strong> Ваш токен можно делить до 9 знаков, как SOL. Например: 0.000000001 токена. 
-                              Подходит для микроплатежей и DeFi.
+                              <strong>High precision:</strong> Your token can be divided up to 9 digits, like SOL. For example: 0.000000001 tokens.
+Suitable for micropayments and DeFi.
                             </>
                           )}
                         </p>
@@ -681,12 +681,12 @@ return (
 
                     {/* Пример отображения */}
                     <div className="bg-green-50 p-2.5 sm:p-3 rounded-lg">
-                      <h5 className="text-sm sm:text-base font-semibold text-green-800 mb-1 sm:mb-2">Пример:</h5>
+                      <h5 className="text-sm sm:text-base font-semibold text-green-800 mb-1 sm:mb-2">Example:</h5>
                       <p className="text-xs sm:text-sm text-green-700">
-                        {Number(formData.decimals) === 0 && "1 токен = 1 токен (нельзя разделить)"}
-                        {Number(formData.decimals) === 2 && "1 токен = 1.00 токена (можно: 0.50, 0.01)"}
-                        {Number(formData.decimals) === 6 && "1 токен = 1.000000 токена (можно: 0.000001)"}
-                        {Number(formData.decimals) === 9 && "1 токен = 1.000000000 токена (можно: 0.000000001)"}
+                        {Number(formData.decimals) === 0 && "1 token = 1 tokens (cannot be devided)"}
+                        {Number(formData.decimals) === 2 && "1 token= 1.00 tokens (can be devided by: 0.50, 0.01)"}
+                        {Number(formData.decimals) === 6 && "1 token = 1.000000 tokens (can be devided by: 0.000001)"}
+                        {Number(formData.decimals) === 9 && "1 token = 1.000000000 tokens (can be devided by: 0.000000001)"}
                       </p>
                     </div>
                   </div>
@@ -698,7 +698,7 @@ return (
                     onClick={() => setIsPreviewOpen(false)}
                     className="w-full py-2.5 sm:py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm sm:text-base font-semibold rounded-lg hover:opacity-90 transition-all duration-200"
                   >
-                    Понятно, закрыть
+                    Got it, close it
                   </button>
                 </div>
               </div>

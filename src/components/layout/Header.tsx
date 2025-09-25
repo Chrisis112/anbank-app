@@ -20,18 +20,26 @@ export default function Header() {
         />
       </Head>
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3">
- {/* Логотип */}
+        {/* Логотип и Forum */}
         <div className="flex items-center">
           <img src="/favicon.ico" alt="Logo" className="h-8 w-8 mr-2" />
-          <span className="font-bold text-lg">ANBT</span>
-        </div>
-        {/* Десктоп меню */}
-        <nav className="hidden md:flex items-center gap-6">
-          <Link href="/forum" className="hover:text-indigo-400 transition-colors">
+          <span className="font-bold text-lg mr-6">ANBT</span>
+          {/* Forum - всегда справа от логотипа */}
+          <Link
+            href="/forum"
+            className="hover:text-indigo-400 transition-colors text-base"
+          >
             Forum
           </Link>
+        </div>
+
+        {/* Десктоп меню - только Profile */}
+        <nav className="hidden md:flex items-center gap-6">
           {user && (
-            <Link href="/profile" className="hover:text-indigo-400 transition-colors">
+            <Link
+              href="/profile"
+              className="hover:text-indigo-400 transition-colors"
+            >
               Profile
             </Link>
           )}
@@ -39,23 +47,27 @@ export default function Header() {
 
         {/* Мобильная кнопка меню */}
         <div className="md:hidden">
-          <button onClick={() => setMobileMenuOpen(!isMobileMenuOpen)} aria-label="Toggle menu">
-            <FaBars size={20} />
-          </button>
+          {user && (
+            <button
+              onClick={() => setMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              <FaBars size={20} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Мобильное меню */}
-      {isMobileMenuOpen && (
+      {/* Мобильное меню - только Profile */}
+      {isMobileMenuOpen && user && (
         <div className="md:hidden border-t border-gray-800 p-4 space-y-4 bg-gray-900">
-          <Link href="/forum" className="block hover:text-indigo-400" onClick={() => setMobileMenuOpen(false)}>
-            Forum
+          <Link
+            href="/profile"
+            className="block hover:text-indigo-400"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            Profile
           </Link>
-          {user && (
-            <Link href="/profile" className="block hover:text-indigo-400" onClick={() => setMobileMenuOpen(false)}>
-              Profile
-            </Link>
-          )}
         </div>
       )}
     </header>
