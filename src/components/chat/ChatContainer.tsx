@@ -95,7 +95,7 @@ const deleteMessage = async (messageId: string) => {
     socketRef.current?.emit('deleteMessage', { messageId, chatId });
 
   } catch (error) {
-    alert('Ошибка удаления сообщения');
+    alert('Error deleting message');
   }
 };
 

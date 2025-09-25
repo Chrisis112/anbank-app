@@ -41,17 +41,13 @@ export default function RegistrationForm() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Subscription renewal loading state
-  const [renewalLoading, setRenewalLoading] = useState(false);
-
   // Abort controller for login request cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const SOLANA_NETWORK =
     process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'https://api.mainnet-beta.solana.com';
   const RECEIVER_WALLET = process.env.NEXT_PUBLIC_RECEIVER_WALLET || '';
-  // Изменено: используем EXPECTED_AMOUNT вместо SOL_AMOUNT для соответствия с сервером
-  const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_EXPECTED_AMOUNT || '0.019');
+  const SOL_AMOUNT = parseFloat(process.env.NEXT_PUBLIC_SOL_AMOUNT || '0.01');
 
   useEffect(() => {
     return () => {
@@ -75,19 +71,11 @@ export default function RegistrationForm() {
 
     try {
       await provider.connect();
-      console.log('Connected to Phantom wallet');
 
       const connection = new Connection(SOLANA_NETWORK);
       const fromPubkey = provider.publicKey;
       const toPubkey = new PublicKey(RECEIVER_WALLET);
       const lamports = Math.floor(SOL_AMOUNT * LAMPORTS_PER_SOL);
-
-      console.log('Payment details:', {
-        from: fromPubkey.toBase58(),
-        to: toPubkey.toBase58(),
-        amount: SOL_AMOUNT,
-        lamports
-      });
 
       const transaction = new Transaction().add(
         SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
@@ -97,110 +85,79 @@ export default function RegistrationForm() {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
 
-      // Подписание и отправка транзакции
+      // Подписание и отправка транзакции одинаковы и для десктопа, и для мобильного Phantom браузера
       const signed = await provider.signTransaction(transaction);
       const signature = await connection.sendRawTransaction(signed.serialize());
-      
-      console.log('Transaction sent, signature:', signature);
-      
       await connection.confirmTransaction(signature, 'confirmed');
-      console.log('Transaction confirmed');
 
       toast.success('✅ Payment successful!');
       return signature;
     } catch (err) {
-      console.error('Payment error:', err);
-      toast.error('Payment failed: ' + (err as Error).message);
+      toast.error('Payment failed');
       return null;
     }
   };
 
   const handleRenewSubscription = async () => {
-    if (renewalLoading) return; // Предотвращаем множественные клики
-    
-    setRenewalLoading(true);
-    const provider = (window as any).solana;
-    let solanaPublicKey = null;
-    let signature = null;
+  const provider = (window as any).solana;
+  let solanaPublicKey = null;
+  let signature = null;
 
+  if (provider?.isPhantom) {
     try {
-      if (provider?.isPhantom) {
-        await provider.connect();
-        solanaPublicKey = provider.publicKey?.toBase58();
-        
-        if (!solanaPublicKey) {
-          toast.error("Failed to get Phantom's public key");
-          return;
-        }
+      await provider.connect();
 
-        console.log('Wallet connected, public key:', solanaPublicKey);
-
-        signature = await handlePhantomPayment();
-        if (!signature) {
-          toast.error("Payment failed");
-          return;
-        }
-
-        console.log('Payment completed, signature:', signature);
-      } else {
-        toast.error("Phantom Wallet not found");
+      solanaPublicKey = provider.publicKey?.toBase58();
+      if (!solanaPublicKey) {
+        toast.error("Failed to get Phantom's public key");
         return;
       }
 
-      if (!loginEmail || !loginEmail.includes("@")) {
-        toast.error("Valid email is required for renewing subscription");
+      signature = await handlePhantomPayment();
+      if (!signature) {
+        toast.error("Payment failed");
         return;
       }
+    } catch (err) {
+      toast.error("Failed to connect to Phantom Wallet");
+      return;
+    }
+  } else {
+    toast.error("Phantom Wallet not found");
+    return;
+  }
 
-      console.log('Sending renewal request with:', {
+  if (!loginEmail || !loginEmail.includes("@")) {
+    toast.error("Valid email is required for renewing subscription");
+    return;
+  }
+
+  try {
+    const { data } = await axios.post(
+      `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
+      {
         txSignature: signature,
         solanaPublicKey,
-        email: loginEmail
-      });
-
-      const { data } = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
-        {
-          txSignature: signature, // Убедимся, что поле называется именно так
-          solanaPublicKey,
-          email: loginEmail,
-        },
-        {
-          timeout: 30000, // Увеличиваем таймаут
-        }
-      );
-
-      console.log('Renewal response:', data);
-
-      toast.success("Subscription successfully renewed!");
-      localStorage.setItem("token", data.token);
-      
-      // Правильно маппим поля пользователя
-      setUser({
-        id: data.user.id || data.user._id,
-        nickname: data.user.nickname,
-        email: data.user.email,
-        avatar: data.user.avatar || undefined,
-        role: data.user.role || 'newbie',
-        subscriptionExpiresAt: data.user.subscriptionExpiry || data.user.subscriptionExpiresAt,
-      });
-      
-      setIsSubscriptionModalOpen(false);
-      router.push("/chat");
-    } catch (err) {
-      console.error("Renew subscription error:", err);
-      
-      if (axios.isAxiosError(err)) {
-        const errorMessage = err.response?.data?.error || err.message || "Error renewing subscription";
-        console.error("Server error response:", err.response?.data);
-        toast.error(errorMessage);
-      } else {
-        toast.error("Error renewing subscription");
+        email: loginEmail,
       }
-    } finally {
-      setRenewalLoading(false);
-    }
-  };
+    );
+
+    toast.success("Subscription successfully renewed!");
+    localStorage.setItem("token", data.token);
+    setUser(data.user);
+    setIsSubscriptionModalOpen(false);
+    router.push("/chat");
+  } catch (err) {
+    console.error("Renew subscription error:", err);
+    toast.error(
+      axios.isAxiosError(err) && err.response?.data?.error
+        ? err.response.data.error
+        : "Error renewing subscription"
+    );
+  }
+};
+
+
 
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
@@ -275,7 +232,7 @@ export default function RegistrationForm() {
         return;
       }
 
-      // Проводим оплату через Phantom Wallet
+      // Проводим оплату через Phantom Wallet (одинаково для десктопа и мобильного Phantom браузера)
       const paymentSignature = await handlePhantomPayment();
 
       if (!paymentSignature) {
@@ -341,7 +298,7 @@ export default function RegistrationForm() {
           email: res.data.user.email,
           avatar: res.data.user.avatar || undefined,
           role: res.data.user.role || 'newbie',
-          subscriptionExpiresAt: res.data.user.subscriptionExpiry || res.data.user.subscriptionExpiresAt,
+          subscriptionExpiresAt: res.data.user.subscriptionExpiresAt || undefined,
         });
       }
 
@@ -355,8 +312,6 @@ export default function RegistrationForm() {
         if (err.response?.data?.reason === 'subscription_inactive') {
           setIsLoginModalOpen(false);
           setIsSubscriptionModalOpen(true);
-          // Сохраняем email для продления подписки
-          // loginEmail уже установлен из формы входа
         } else {
           setLoginError(
             err.response?.data?.error || 'Ошибка входа. Проверьте email и пароль.'
@@ -578,7 +533,6 @@ export default function RegistrationForm() {
             <button
               onClick={() => setIsSubscriptionModalOpen(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-white"
-              disabled={renewalLoading}
             >
               ✕
             </button>
@@ -598,10 +552,9 @@ export default function RegistrationForm() {
 
             <button
               onClick={handleRenewSubscription}
-              disabled={renewalLoading}
-              className="w-full py-3 rounded-lg font-bold bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 rounded-lg font-bold bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent"
             >
-              {renewalLoading ? 'Processing payment...' : 'Pay via Phantom Wallet'}
+              Pay via Phantom Wallet
             </button>
           </div>
         </div>
