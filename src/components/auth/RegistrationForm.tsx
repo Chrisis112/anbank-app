@@ -106,27 +106,29 @@ export default function RegistrationForm() {
   if (provider?.isPhantom) {
     try {
       await provider.connect();
+
       solanaPublicKey = provider.publicKey?.toBase58();
       if (!solanaPublicKey) {
-        toast.error('Failed to get Phantom\'s public key');
+        toast.error("Failed to get Phantom's public key");
         return;
       }
+
       signature = await handlePhantomPayment();
       if (!signature) {
-        toast.error('Payment failed');
+        toast.error("Payment failed");
         return;
       }
     } catch (err) {
-      toast.error('Failed to connect to Phantom Wallet');
+      toast.error("Failed to connect to Phantom Wallet");
       return;
     }
   } else {
-    toast.error('Phantom Wallet not found');
+    toast.error("Phantom Wallet not found");
     return;
   }
 
-  if (!loginEmail) {
-    toast.error('Email is required for renewing subscription');
+  if (!loginEmail || !loginEmail.includes("@")) {
+    toast.error("Valid email is required for renewing subscription");
     return;
   }
 
@@ -139,20 +141,22 @@ export default function RegistrationForm() {
         email: loginEmail,
       }
     );
-    toast.success('Subscription successfully renewed!');
-    localStorage.setItem('token', data.token);
+
+    toast.success("Subscription successfully renewed!");
+    localStorage.setItem("token", data.token);
     setUser(data.user);
     setIsSubscriptionModalOpen(false);
-    router.push('/chat');
+    router.push("/chat");
   } catch (err) {
-    console.error('Renew subscription error:', err);
+    console.error("Renew subscription error:", err);
     toast.error(
       axios.isAxiosError(err) && err.response?.data?.error
         ? err.response.data.error
-        : 'Error renewing subscription'
+        : "Error renewing subscription"
     );
   }
 };
+
 
 
   const handlePromoSuccess = (code: string) => {
