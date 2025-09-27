@@ -60,9 +60,10 @@ const [pushToken, setPushToken] = useState<string | null>(null);
   }, []);
 
   // Функция определения мобильного устройства
-  const isMobile = () => {
-    return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-  };
+const isMobile = () => {
+  if (typeof window === 'undefined') return false;
+  return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+};
 
   // Функция оплаты через Phantom - одинаково для десктоп и мобильного браузера Phantom
   const handlePhantomPayment = async (): Promise<string | null> => {
