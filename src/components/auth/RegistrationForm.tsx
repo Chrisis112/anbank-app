@@ -188,7 +188,7 @@ const [pushToken, setPushToken] = useState<string | null>(null);
   
 const sendPushTokenToServer = async (token: string) => {
   try {
-    await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/user/push-token`, { token }, {
+    await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/users/push-token`, { token }, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
     console.log('Push token sent to server');
