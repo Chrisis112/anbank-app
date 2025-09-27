@@ -20,7 +20,7 @@ messaging.onBackgroundMessage(function(payload) {
   const notificationTitle = payload.notification.title || 'Push Notification';
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/firebase-logo.png' // при желании можно добавить иконку уведомления
+    icon: '/favicon.ico' // при желании можно добавить иконку уведомления
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
