@@ -1,11 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getMessaging, getToken, Messaging } from 'firebase/messaging';
+import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
 import { initializeApp, FirebaseApp } from 'firebase/app';
 
-
-// Конфиг Firebase — замените на свой
 const firebaseConfig = {
   apiKey: "AIzaSyD6UHZSAZjr-vgM3rGvKsJS3W_TDH6fG4s",
   authDomain: "anbanktoken-e378c.firebaseapp.com",
@@ -20,56 +18,78 @@ let app: FirebaseApp | undefined;
 let messaging: Messaging | undefined;
 
 export default function NotificationPermission({ onToken }: { onToken?: (token: string) => void }) {
-  const [permission, setPermission] = useState('default');
+  const [permission, setPermission] = useState(() =>
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
+  );
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!('Notification' in window)) {
-      console.warn('This browser does not support notifications.');
+    if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+      console.warn('Notifications or Service Worker not supported.');
       return;
     }
 
-    if (!app) {
-      app = initializeApp(firebaseConfig);
-      messaging = getMessaging(app);
-    }
-
-    setPermission(Notification.permission);
-
-    if (Notification.permission === 'default') {
-      Notification.requestPermission().then((perm) => {
-        setPermission(perm);
-        if (perm === 'granted') {
-          registerForPush();
+    async function initializePush() {
+      try {
+        if (!app) {
+          app = initializeApp(firebaseConfig);
+          messaging = getMessaging(app);
         }
-      });
-    } else if (Notification.permission === 'granted') {
-      registerForPush();
-    }
-  }, []);
+        // Регистрация service worker
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        console.log('Service Worker registered:', registration);
 
-  const registerForPush = async () => {
-    if (!messaging) {
-      console.error('Firebase messaging is not initialized.');
-      return;
-    }
-    try {
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID;
-      if (!vapidKey) {
-        console.error('VAPID key is not set');
-        return;
+        // Запрос разрешения
+        let currentPermission = Notification.permission;
+        if (currentPermission === 'default') {
+          currentPermission = await Notification.requestPermission();
+          setPermission(currentPermission);
+        }
+
+        if (currentPermission !== 'granted') {
+          throw new Error('Notification permission not granted');
+        }
+
+        // Проверка VAPID ключа из env
+        const vapidKey = process.env.NEXT_PUBLIC_VAPID;
+        if (!vapidKey) {
+          throw new Error('VAPID key is not set');
+        }
+
+        if (!messaging) {
+          throw new Error('Firebase messaging not initialized');
+        }
+
+        // Получение push токена с передачей serviceWorkerRegistration
+        const currentToken = await getToken(messaging, {
+          vapidKey,
+          serviceWorkerRegistration: registration,
+        });
+
+        if (currentToken) {
+          console.log('Push token:', currentToken);
+          if (onToken) onToken(currentToken);
+        } else {
+          console.warn('No registration token available. Request permission to generate one.');
+        }
+      } catch (error) {
+        console.error('Error initializing push notifications:', error);
       }
-      const currentToken = await getToken(messaging, { vapidKey });
-      if (currentToken) {
-        console.log('Push token:', currentToken);
-        if (onToken) onToken(currentToken);
-      } else {
-        console.log('No registration token available. Request permission to generate one.');
-      }
-    } catch (error) {
-      console.error('An error occurred while retrieving token.', error);
     }
-  };
+
+    initializePush();
+
+    // Обработка foreground push уведомлений
+    const unsubscribeOnMessage = messaging
+      ? onMessage(messaging, (payload) => {
+          console.log('Foreground push message:', payload);
+          // Можно показать кастомные уведомления UI
+        })
+      : () => {};
+
+    return () => {
+      unsubscribeOnMessage();
+    };
+  }, [onToken]);
 
   return null;
 }
