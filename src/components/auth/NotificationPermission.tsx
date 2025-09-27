@@ -6,12 +6,13 @@ import { initializeApp } from 'firebase/app';
 
 // Конфиг Firebase (замени на свой)
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_AUTH_DOMAIN',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_STORAGE_BUCKET',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: "AIzaSyD6UHZSAZjr-vgM3rGvKsJS3W_TDH6fG4s",
+  authDomain: "anbanktoken-e378c.firebaseapp.com",
+  projectId: "anbanktoken-e378c",
+  storageBucket: "anbanktoken-e378c.firebasestorage.app",
+  messagingSenderId: "299210750747",
+  appId: "1:299210750747:web:4ba5ab63ea75507fdcb1be",
+  measurementId: "G-WDKZB9BCNW"
 };
 
 const app = initializeApp(firebaseConfig);
