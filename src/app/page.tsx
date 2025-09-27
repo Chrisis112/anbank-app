@@ -17,7 +17,29 @@ export default function HomePage() {
         <RegistrationForm />
 
       </main>
-      <NotificationPermission/>
+      <NotificationPermission
+  onToken={async (token) => {
+    try {
+      const authToken = localStorage.getItem('token');
+      if (!authToken) {
+        console.warn('No auth token, user not authenticated');
+        return;
+      }
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/push-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ token }),
+      });
+      console.log('Push token saved to server');
+    } catch (error) {
+      console.error('Failed to save push token on server', error);
+    }
+  }}
+/>
+
       <ToastContainer
         position="top-right"
         autoClose={5000}
