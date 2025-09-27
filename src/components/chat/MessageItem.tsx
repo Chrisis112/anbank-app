@@ -125,12 +125,12 @@ export default function MessageItem({
               className="ml-2 text-red-500 hover:text-red-700 focus:outline-none"
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm('Удалить сообщение?')) {
+                if (confirm('Delete message?')) {
                   onDelete();
                 }
               }}
               aria-label="Delete message"
-              title="Удалить сообщение"
+              title="Delete message"
             >
               🗑️
             </button>
