@@ -4,6 +4,7 @@ import RegistrationForm from '../components/auth/RegistrationForm';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Buffer } from 'buffer';
+import PushNotificationsManager from '../components/PushNotificationsManager'; // ваш компонент подписки
 
 // Глобальная настройка Buffer для браузера
 if (typeof window !== 'undefined') {
@@ -15,6 +16,7 @@ export default function HomePage() {
     <>
       <main className="min-h-screen relative overflow-hidden">
         <RegistrationForm />
+        <PushNotificationsManager /> {/* Регистрируем Service Worker здесь */}
       </main>
       <ToastContainer
         position="top-right"
