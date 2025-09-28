@@ -14,6 +14,11 @@ const firebaseConfig = {
 // Инициализация Firebase App
 firebase.initializeApp(firebaseConfig);
 
+// Принудительный переход сервис-воркера в активное состояние
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
