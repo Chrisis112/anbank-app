@@ -10,9 +10,7 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 import React from 'react';
 import { WalletContextProvider } from '@/components/providers/WalletProvider';
 
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-
   return (
     <html lang="en">
       <head>
@@ -22,18 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
         <meta name="theme-color" content="#0057ff" />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js');
-              }
-            `,
-          }}
-        />
       </head>
       <body>
-            <WalletContextProvider>{children}</WalletContextProvider>
+        <WalletContextProvider>{children}</WalletContextProvider>
       </body>
     </html>
   );

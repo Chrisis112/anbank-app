@@ -17,11 +17,10 @@ const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification.title || 'Push Notification';
+  const notificationTitle = (payload.notification && payload.notification.title) || 'Push Notification';
   const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/favicon.ico' // при желании можно добавить иконку уведомления
+    body: (payload.notification && payload.notification.body) || '',
+    icon: '/favicon.ico',
   };
-
   self.registration.showNotification(notificationTitle, notificationOptions);
 });

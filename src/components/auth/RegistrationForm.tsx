@@ -14,8 +14,6 @@ import {
   Connection,
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
-import NotificationPermission from './NotificationPermission';
-
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -35,8 +33,6 @@ export default function RegistrationForm() {
   const [loading, setLoading] = useState(false);
   const [promoCode, setPromoCode] = useState<string | null>(null);
   const [promoCodeError, setPromoCodeError] = useState<string | null>(null);
-const [showNotificationsPermission, setShowNotificationsPermission] = useState(false);
-const [pushToken, setPushToken] = useState<string | null>(null);
 
   // Login modal states
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -60,10 +56,9 @@ const [pushToken, setPushToken] = useState<string | null>(null);
   }, []);
 
   // Функция определения мобильного устройства
-const isMobile = () => {
-  if (typeof window === 'undefined') return false;
-  return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-};
+  const isMobile = () => {
+    return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  };
 
   // Функция оплаты через Phantom - одинаково для десктоп и мобильного браузера Phantom
   const handlePhantomPayment = async (): Promise<string | null> => {
@@ -186,71 +181,75 @@ const isMobile = () => {
     }
   };
 
-  
-const sendPushTokenToServer = async (token: string) => {
-  try {
-    await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/users/push-token`, { token }, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    });
-    console.log('Push token sent to server');
-  } catch (error) {
-    console.error('Failed to send push token to server', error);
-  }
-};
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
- const handleRegisterSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
+    if (!nickname || !email || !password || !confirmPassword) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast.error('The passwords dont match');
+      return;
+    }
 
-  if (!nickname || !email || !password || !confirmPassword) {
-    toast.error('Please fill in all fields');
-    return;
-  }
-  if (password !== confirmPassword) {
-    toast.error('The passwords dont match');
-    return;
-  }
+    setLoading(true);
 
-  setLoading(true);
+    // Проверка уникальности email и никнейма
+    const { emailExists, nicknameExists } = await checkUnique(email, nickname);
+    if (emailExists) {
+      toast.error('Email is already in use');
+      setLoading(false);
+      return;
+    }
+    if (nicknameExists) {
+      toast.error('The nickname is already in use');
+      setLoading(false);
+      return;
+    }
 
-  const { emailExists, nicknameExists } = await checkUnique(email, nickname);
-  if (emailExists) {
-    toast.error('Email is already in use');
-    setLoading(false);
-    return;
-  }
-  if (nicknameExists) {
-    toast.error('The nickname is already in use');
-    setLoading(false);
-    return;
-  }
+    try {
+      // Если есть валидный промокод — регистрируем без оплаты
+      if (promoCode) {
+        const result = await register(
+          nickname,
+          email,
+          password,
+          role,
+          null,
+          null,
+          promoCode
+        );
 
-  try {
-    let result;
+        setLoading(false);
 
-    if (promoCode) {
-      result = await register(
-        nickname,
-        email,
-        password,
-        role,
-        null,
-        null,
-        promoCode
-      );
-    } else {
+        if (result.success) {
+          toast.success('Registration successful!');
+          router.push('/chat');
+        } else {
+          toast.error(result.error || 'Registration error');
+        }
+        return;
+      }
+
+      // Проводим оплату через Phantom Wallet (одинаково для десктопа и мобильного Phantom браузера)
       const paymentSignature = await handlePhantomPayment();
+
       if (!paymentSignature) {
         toast.error('Payment failed');
         setLoading(false);
         return;
       }
+
       const solanaPublicKey = (window as any).solana?.publicKey?.toBase58();
       if (!solanaPublicKey) {
         toast.error('Failed to get public key');
         setLoading(false);
         return;
       }
-      result = await register(
+
+      // Регистрация с оплатой
+      const result = await register(
         nickname,
         email,
         password,
@@ -259,80 +258,72 @@ const sendPushTokenToServer = async (token: string) => {
         paymentSignature,
         null
       );
-    }
 
-    setLoading(false);
+      setLoading(false);
 
-if (result.success) {
-  toast.success('Registration successful!');
-  if (result.token) {
-    localStorage.setItem('token', result.token);
-  } else {
-    console.warn('No token received on registration');
-  }
-  setShowNotificationsPermission(true);
-  router.push('/chat');
-} else {
-  toast.error(result.error || 'Registration error');
-}
-  } catch {
-    setLoading(false);
-    toast.error('Registration error');
-  }
-};
-
-const handleLoginSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setLoginLoading(true);
-  setLoginError(null);
-
-  try {
-    abortControllerRef.current = new AbortController();
-    const res = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
-      { email: loginEmail, password: loginPassword },
-      {
-        signal: abortControllerRef.current.signal,
-        timeout: 10000,
-      }
-    );
-
-    localStorage.setItem('token', res.data.token);
-
-    if (res.data.user) {
-      setUser({
-        id: res.data.user._id || res.data.user.id,
-        nickname: res.data.user.nickname,
-        email: res.data.user.email,
-        avatar: res.data.user.avatar || undefined,
-        role: res.data.user.role || 'newbie',
-        subscriptionExpiresAt: res.data.user.subscriptionExpiresAt || undefined,
-      });
-    }
-
-    toast.success('Вход выполнен успешно!');
-    setIsLoginModalOpen(false);
-    setShowNotificationsPermission(true);
-    router.push('/chat');
-  } catch (err: unknown) {
-    if (axios.isCancel(err)) {
-      // Запрос отменён
-    } else if (axios.isAxiosError(err)) {
-      if (err.response?.data?.reason === 'subscription_inactive') {
-        setIsLoginModalOpen(false);
-        setIsSubscriptionModalOpen(true);
+      if (result.success) {
+        toast.success('Registration successful!');
+        router.push('/chat');
       } else {
-        setLoginError(
-          err.response?.data?.error || 'Ошибка входа. Проверьте email и пароль.'
-        );
+        toast.error(result.error || 'Registration error');
       }
-    } else {
-      setLoginError('Ошибка входа. Проверьте email и пароль.');
+    } catch {
+      setLoading(false);
+      toast.error('Registration error');
     }
-  } finally {
-    setLoginLoading(false);
-  }
-};
+  };
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError(null);
+
+    try {
+      abortControllerRef.current = new AbortController();
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
+        { email: loginEmail, password: loginPassword },
+        {
+          signal: abortControllerRef.current.signal,
+          timeout: 10000,
+        }
+      );
+
+      localStorage.setItem('token', res.data.token);
+
+      if (res.data.user) {
+        setUser({
+          id: res.data.user._id || res.data.user.id,
+          nickname: res.data.user.nickname,
+          email: res.data.user.email,
+          avatar: res.data.user.avatar || undefined,
+          role: res.data.user.role || 'newbie',
+          subscriptionExpiresAt: res.data.user.subscriptionExpiresAt || undefined,
+        });
+      }
+
+      toast.success('Вход выполнен успешно!');
+      setIsLoginModalOpen(false);
+      router.push('/chat');
+    } catch (err: unknown) {
+      if (axios.isCancel(err)) {
+        // Запрос отменён
+      } else if (axios.isAxiosError(err)) {
+        if (err.response?.data?.reason === 'subscription_inactive') {
+          setIsLoginModalOpen(false);
+          setIsSubscriptionModalOpen(true);
+        } else {
+          setLoginError(
+            err.response?.data?.error || 'Ошибка входа. Проверьте email и пароль.'
+          );
+        }
+      } else {
+        setLoginError('Ошибка входа. Проверьте email и пароль.');
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   const openLoginModal = () => {
     setIsLoginModalOpen(true);
@@ -348,235 +339,226 @@ const handleLoginSubmit = async (e: React.FormEvent) => {
     abortControllerRef.current?.abort();
     setActiveTab('register');
   };
-return (
-  <>
-    <div className="bg-crypto-dark min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-xl mx-auto px-6 py-8 rounded-xl shadow-2xl bg-crypto-dark">
-        <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
-          CryptoChat
-        </h1>
 
-        {/* Tab Switcher */}
-        <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
-          <button
-            className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
-              activeTab === 'register'
-                ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#6481f5_100%)] text-white'
-                : 'bg-transparent text-gray-300'
-            }`}
-            onClick={() => setActiveTab('register')}
-            type="button"
-          >
-            Register
-          </button>
-          <button
-            className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
-              activeTab === 'login'
-                ? 'bg-[linear-gradient(90deg,#191b1f_0%,#232531_100%)] text-white'
-                : 'bg-transparent text-gray-300'
-            }`}
-            onClick={() => {
-              setActiveTab('login');
-              openLoginModal();
-            }}
-            type="button"
-          >
-            Login
-          </button>
-        </div>
+  return (
+    <>
+      <div className="bg-crypto-dark min-h-screen flex items-center justify-center px-4">
+        <div className="w-full max-w-xl mx-auto px-6 py-8 rounded-xl shadow-2xl bg-crypto-dark">
+          <h1 className="font-orbitron text-3xl mb-1 text-crypto-accent text-center tracking-wide">
+            CryptoChat
+          </h1>
 
-        {activeTab === 'register' && (
-          <form onSubmit={handleRegisterSubmit} className="space-y-3">
-            <div>
-              <label className="block mb-1 text-white font-semibold">Nickname</label>
-              <input
-                type="text"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
-                placeholder="Choose a nickname"
-                required
-              />
-            </div>
+          {/* Tab Switcher */}
+          <div className="flex mb-5 bg-gradient-to-r from-crypto-accent to-blue-500 rounded-lg p-1 transition-all">
+            <button
+              className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                activeTab === 'register'
+                  ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#6481f5_100%)] text-white'
+                  : 'bg-transparent text-gray-300'
+              }`}
+              onClick={() => setActiveTab('register')}
+              type="button"
+            >
+              Register
+            </button>
+            <button
+              className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                activeTab === 'login'
+                  ? 'bg-[linear-gradient(90deg,#191b1f_0%,#232531_100%)] text-white'
+                  : 'bg-transparent text-gray-300'
+              }`}
+              onClick={() => {
+                setActiveTab('login');
+                openLoginModal();
+              }}
+              type="button"
+            >
+              Login
+            </button>
+          </div>
 
-            <div>
-              <label className="block mb-1 text-white font-semibold">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
-                placeholder="email@example.com"
-                required
-              />
-            </div>
+          {activeTab === 'register' && (
+            <form onSubmit={handleRegisterSubmit} className="space-y-3">
+              <div>
+                <label className="block mb-1 text-white font-semibold">Nickname</label>
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
+                  placeholder="Choose a nickname"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="block mb-1 text-white font-semibold">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
-                required
-              />
-            </div>
+              <div>
+                <label className="block mb-1 text-white font-semibold">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
+                  placeholder="email@example.com"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="block mb-1 text-white font-semibold">Confirm Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
-                required
-              />
-            </div>
+              <div>
+                <label className="block mb-1 text-white font-semibold">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="block mb-1 text-white font-semibold">Role</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as Role)}
-                className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light"
+              <div>
+                <label className="block mb-1 text-white font-semibold">Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1 text-white font-semibold">Role</label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as Role)}
+                  className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light"
+                >
+                  <option value="newbie">Newbie</option>
+                  <option value="advertiser">Advertiser</option>
+                  <option value="creator">Creator</option>
+                </select>
+              </div>
+
+              <PromoCodeInput onSuccess={handlePromoSuccess} onFail={handlePromoFail} />
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 rounded-lg font-bold transition-colors text-lg bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <option value="newbie">Newbie</option>
-                <option value="advertiser">Advertiser</option>
-                <option value="creator">Creator</option>
-              </select>
-            </div>
-
-            <PromoCodeInput onSuccess={handlePromoSuccess} onFail={handlePromoFail} />
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-lg font-bold transition-colors text-lg bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Loading...' : 'Register'}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
-
-    {/* Login Modal */}
-    {isLoginModalOpen && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-crypto-dark rounded-xl shadow-2xl w-full max-w-md p-6 relative">
-          <button
-            onClick={closeLoginModal}
-            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
-            type="button"
-            aria-label="Close login modal"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-
-          <h2 className="text-2xl font-orbitron gradient-title mb-6 text-center text-crypto-accent">
-            Login
-          </h2>
-
-          {loginError && (
-            <div
-              className="bg-red-500/20 border border-red-500 text-red-400 p-2 rounded mb-4 text-center"
-              role="alert"
-            >
-              {loginError}
-            </div>
+                {loading ? 'Loading...' : 'Register'}
+              </button>
+            </form>
           )}
+        </div>
+      </div>
 
-          <form onSubmit={handleLoginSubmit} className="space-y-4" noValidate>
-            <div>
-              <label htmlFor="loginEmail" className="block text-sm mb-1 text-white font-semibold">
-                Email
-              </label>
-              <input
-                type="email"
-                id="loginEmail"
-                name="loginEmail"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
-                placeholder="email@example.com"
-                required
-                autoComplete="email"
-              />
-            </div>
+      {/* Login Modal */}
+      {isLoginModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-crypto-dark rounded-xl shadow-2xl w-full max-w-md p-6 relative">
+            <button
+              onClick={closeLoginModal}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+              type="button"
+              aria-label="Close login modal"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
 
-            <div>
-              <label htmlFor="loginPassword" className="block text-sm mb-1 text-white font-semibold">
-                Password
-              </label>
-              <input
-                type="password"
-                id="loginPassword"
-                name="loginPassword"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
-                required
-                autoComplete="current-password"
-              />
-            </div>
+            <h2 className="text-2xl font-orbitron gradient-title mb-6 text-center text-crypto-accent">
+              Login
+            </h2>
+
+            {loginError && (
+              <div
+                className="bg-red-500/20 border border-red-500 text-red-400 p-2 rounded mb-4 text-center"
+                role="alert"
+              >
+                {loginError}
+              </div>
+            )}
+
+            <form onSubmit={handleLoginSubmit} className="space-y-4" noValidate>
+              <div>
+                <label htmlFor="loginEmail" className="block text-sm mb-1 text-white font-semibold">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  id="loginEmail"
+                  name="loginEmail"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
+                  placeholder="email@example.com"
+                  required
+                  autoComplete="email"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="loginPassword" className="block text-sm mb-1 text-white font-semibold">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  id="loginPassword"
+                  name="loginPassword"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full p-3 rounded-lg border-2 border-crypto-accent bg-crypto-input text-white font-light transition focus:outline-none focus:ring-2 focus:ring-crypto-accent placeholder-gray-400"
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full py-3 rounded-lg font-bold transition-colors text-lg bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loginLoading ? 'Loading...' : 'Login'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Subscription Modal */}
+      {isSubscriptionModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-crypto-dark rounded-xl shadow-2xl w-full max-w-md p-6 relative">
+            <button
+              onClick={() => setIsSubscriptionModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-2xl font-orbitron text-center text-crypto-accent mb-4">
+              Renew your subscription
+            </h2>
+
+            <p className="text-gray-300 text-center mb-6">
+              Your subscription has expired. To continue using the app, please renew it.
+            </p>
+
+            <p className="text-gray-400 text-center mb-6 italic">
+              Please note that the subscription will be extended for the user: <br />
+              <span className="font-semibold text-white">{loginEmail}</span>
+            </p>
 
             <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full py-3 rounded-lg font-bold transition-colors text-lg bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleRenewSubscription}
+              className="w-full py-3 rounded-lg font-bold bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent"
             >
-              {loginLoading ? 'Loading...' : 'Login'}
+              Pay via Phantom Wallet
             </button>
-          </form>
+          </div>
         </div>
-      </div>
-    )}
-
-    {/* Subscription Modal */}
-    {isSubscriptionModalOpen && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-crypto-dark rounded-xl shadow-2xl w-full max-w-md p-6 relative">
-          <button
-            onClick={() => setIsSubscriptionModalOpen(false)}
-            className="absolute top-4 right-4 text-gray-400 hover:text-white"
-          >
-            ✕
-          </button>
-
-          <h2 className="text-2xl font-orbitron text-center text-crypto-accent mb-4">
-            Renew your subscription
-          </h2>
-
-          <p className="text-gray-300 text-center mb-6">
-            Your subscription has expired. To continue using the app, please renew it.
-          </p>
-
-          <p className="text-gray-400 text-center mb-6 italic">
-            Please note that the subscription will be extended for the user: <br />
-            <span className="font-semibold text-white">{loginEmail}</span>
-          </p>
-
-          <button
-            onClick={handleRenewSubscription}
-            className="w-full py-3 rounded-lg font-bold bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-400 hover:to-crypto-accent"
-          >
-            Pay via Phantom Wallet
-          </button>
-        </div>
-      </div>
-    )}
-
-    {/* Notification Permission Component */}
-    {showNotificationsPermission && (
-      <NotificationPermission
-        onToken={(token) => {
-          setPushToken(token);
-          sendPushTokenToServer(token);
-        }}
-      />
-    )}
-  </>
-);
+      )}
+    </>
+  );
 }
