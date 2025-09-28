@@ -635,59 +635,60 @@ const isAdmin = user?.role?.includes('admin') ?? false;
                 <FaTimes size={20} />
               </button>
 
-              {panelType === 'pm' && (
-                <>
-                  <div className="px-6 pb-2 text-white font-orbitron font-semibold text-xl border-b border-crypto-accent">
-                    Personal Messages
-                  </div>
-                  <div className="p-4 overflow-auto max-h-[calc(100vh-140px)]">
-                    {privateChats.length === 0 ? (
-                      <div className="text-gray-400 text-center py-4">No Personal Messages</div>
-                    ) : (
-                      privateChats.map((chat) => (
-                        <div
-                          key={`${chat.chatId}_${chat.otherUserId}`}
-                          className="flex items-center justify-between w-full p-3 mb-2 rounded-lg border border-crypto-accent bg-crypto-input hover:bg-crypto-accent/20 cursor-pointer transition"
-                        >
-                          <button
-                            onClick={() => openChat(chat.otherUserId)}
-                            className="flex items-center gap-3 flex-1 text-left"
-                          >
-                            <img
-                              src={chat.avatar || '/default-avatar.png'}
-                              alt={chat.nickname || 'User'}
-                              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/default-avatar.png'; }}
-                              className="w-10 h-10 rounded-full object-cover shrink-0"
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-semibold text-white truncate">
-                                {chat.nickname || `User ${chat.otherUserId.slice(-4)}`}
-                              </span>
-                              <span className="text-sm text-gray-300">
-                                {chat.role || 'newbie'}
-                              </span>
-                              <span className="text-xs text-gray-500 mt-1">
-                                {chat.timestamp ? new Date(chat.timestamp).toLocaleString() : '—'}
-                              </span>
-                            </div>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteChat(chat.otherUserId);
-                            }}
-                            className="ml-2 p-1 text-red-500 hover:text-red-700"
-                            aria-label="Delete Chat"
-                            title="Delete Chat"
-                          >
-                            <FaTimes size={18} />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </>
-              )}
+             {panelType === 'pm' && (
+  <>
+    <div className="px-6 pb-2 text-white font-orbitron font-semibold text-xl border-b border-crypto-accent">
+      Personal Messages
+    </div>
+    <div className="flex flex-col flex-grow p-4 overflow-auto max-h-[calc(100vh-140px)]">
+      {privateChats.length === 0 ? (
+        <div className="text-gray-400 text-center py-4">No Personal Messages</div>
+      ) : (
+        privateChats.map((chat) => (
+          <div
+            key={`${chat.chatId}_${chat.otherUserId}`}
+            className="flex items-center justify-between w-full p-3 mb-2 rounded-lg border border-crypto-accent bg-crypto-input hover:bg-crypto-accent/20 cursor-pointer transition"
+          >
+            <button
+              onClick={() => openChat(chat.otherUserId)}
+              className="flex items-center gap-3 flex-1 text-left"
+            >
+              <img
+                src={chat.avatar || '/default-avatar.png'}
+                alt={chat.nickname || 'User'}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/default-avatar.png'; }}
+                className="w-10 h-10 rounded-full object-cover shrink-0"
+              />
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-white truncate">
+                  {chat.nickname || `User ${chat.otherUserId.slice(-4)}`}
+                </span>
+                <span className="text-sm text-gray-300">
+                  {chat.role || 'newbie'}
+                </span>
+                <span className="text-xs text-gray-500 mt-1">
+                  {chat.timestamp ? new Date(chat.timestamp).toLocaleString() : '—'}
+                </span>
+              </div>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteChat(chat.otherUserId);
+              }}
+              className="ml-2 p-1 text-red-500 hover:text-red-700"
+              aria-label="Delete Chat"
+              title="Delete Chat"
+            >
+              <FaTimes size={18} />
+            </button>
+          </div>
+        ))
+      )}
+    </div>
+  </>
+)}
+
 
               {panelType === 'online' && (
                 <>
