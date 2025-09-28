@@ -54,7 +54,6 @@ export default function HomePage() {
       const unsubscribe = onMessage(messaging, (payload) => {
         console.log('Foreground message received:', payload);
 const notifId = payload.messageId || (payload.notification && (payload.notification as any)['tag']);
-
         if (notifId && seenNotifications.current.has(notifId)) {
           console.log('Duplicate notification ignored', notifId);
           return;
