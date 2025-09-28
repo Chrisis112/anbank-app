@@ -1,13 +1,15 @@
-"use client";
-
 import { useEffect } from "react";
 import { getToken, messaging } from "@/utils/firebase-config";
 import axios from "axios";
 import { useAuthStore } from "@/store/authStore";
 
 const NotificationPermission = () => {
+  const user = useAuthStore(state => state.user);
+
   useEffect(() => {
-    const requestPermission = async () => {
+    if (!user?.id) return; // нет user — не пытаемся регистрировать
+
+    const requestPermissionAndRegister = async () => {
       try {
         let permission = Notification.permission;
         console.log("Current notification permission:", permission);
@@ -39,7 +41,6 @@ const NotificationPermission = () => {
             try {
               const authToken = localStorage.getItem("token");
               if (authToken) {
-                const user = useAuthStore.getState().user;
                 console.log("Sending push token to server for userId:", user?.id);
                 await axios.post(
                   `${process.env.NEXT_PUBLIC_API_URL}/auth/subscribe`,
@@ -69,8 +70,8 @@ const NotificationPermission = () => {
       }
     };
 
-    requestPermission();
-  }, []);
+    requestPermissionAndRegister();
+  }, [user?.id]);
 
   return null;
 };
