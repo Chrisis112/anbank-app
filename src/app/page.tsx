@@ -49,7 +49,7 @@ export default function HomePage() {
     registerPushToken();
   }, [user, authToken]);
 
-  // Обработка foreground сообщений с показом toast и переходом по клику
+  // Обработка foreground сообщений с показом toast и нативного уведомления с кликом
   useEffect(() => {
     if (typeof window !== 'undefined' && messaging) {
       const unsubscribe = onMessage(messaging, (payload) => {
@@ -65,6 +65,7 @@ export default function HomePage() {
           const body = payload.notification?.body ?? '';
           const chatUrl = payload.data?.url ?? '/';
 
+          // Показываем toast с кликом
           toast.info(
             <div style={{ cursor: 'pointer' }}>
               <strong>{title}</strong>
@@ -80,6 +81,19 @@ export default function HomePage() {
               closeOnClick: true,
             }
           );
+
+          // Также создаём нативное уведомление
+          const notification = new Notification(title, {
+            body,
+            icon: payload.notification?.icon || '/favicon.ico',
+          });
+
+          // Клик на нативном уведомлении переводит в чат
+          notification.onclick = () => {
+            window.focus();
+            router.push(chatUrl);
+            notification.close();
+          };
         }
       });
 
