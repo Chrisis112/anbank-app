@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useUserStore } from '@/store/userStore';
 import { toast } from 'react-toastify';
 import PromoCodeInput from './PromoCodeInput';
+import { getToken } from 'firebase/messaging';
 import axios from 'axios';
 import {
   PublicKey,
@@ -14,6 +15,7 @@ import {
   Connection,
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
+import { messaging } from '@/utils/firebase-config'; // Импорт Firebase Messaging для push-токена
 
 type Role = 'newbie' | 'advertiser' | 'creator';
 
@@ -56,22 +58,17 @@ export default function RegistrationForm() {
   }, []);
 
   // Функция определения мобильного устройства
-  const isMobile = () => {
-    return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-  };
+  const isMobile = () => /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
-  // Функция оплаты через Phantom - одинаково для десктоп и мобильного браузера Phantom
+  // Оплата Phantom Wallet (одинаково для десктопа и мобильного)
   const handlePhantomPayment = async (): Promise<string | null> => {
     const provider = (window as any).solana;
-
     if (!provider || !provider.isPhantom) {
       toast.error('Phantom Wallet not found. Please install Phantom or use a Phantom-enabled browser.');
       return null;
     }
-
     try {
       await provider.connect();
-
       const connection = new Connection(SOLANA_NETWORK);
       const fromPubkey = provider.publicKey;
       const toPubkey = new PublicKey(RECEIVER_WALLET);
@@ -85,79 +82,74 @@ export default function RegistrationForm() {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
 
-      // Подписание и отправка транзакции одинаковы и для десктопа, и для мобильного Phantom браузера
       const signed = await provider.signTransaction(transaction);
       const signature = await connection.sendRawTransaction(signed.serialize());
       await connection.confirmTransaction(signature, 'confirmed');
 
       toast.success('✅ Payment successful!');
       return signature;
-    } catch (err) {
+    } catch {
       toast.error('Payment failed');
       return null;
     }
   };
 
   const handleRenewSubscription = async () => {
-  const provider = (window as any).solana;
-  let solanaPublicKey = null;
-  let signature = null;
+    const provider = (window as any).solana;
+    let solanaPublicKey = null;
+    let signature = null;
 
-  if (provider?.isPhantom) {
-    try {
-      await provider.connect();
-
-      solanaPublicKey = provider.publicKey?.toBase58();
-      if (!solanaPublicKey) {
-        toast.error("Failed to get Phantom's public key");
+    if (provider?.isPhantom) {
+      try {
+        await provider.connect();
+        solanaPublicKey = provider.publicKey?.toBase58();
+        if (!solanaPublicKey) {
+          toast.error("Failed to get Phantom's public key");
+          return;
+        }
+        signature = await handlePhantomPayment();
+        if (!signature) {
+          toast.error("Payment failed");
+          return;
+        }
+      } catch {
+        toast.error("Failed to connect to Phantom Wallet");
         return;
       }
-
-      signature = await handlePhantomPayment();
-      if (!signature) {
-        toast.error("Payment failed");
-        return;
-      }
-    } catch (err) {
-      toast.error("Failed to connect to Phantom Wallet");
+    } else {
+      toast.error("Phantom Wallet not found");
       return;
     }
-  } else {
-    toast.error("Phantom Wallet not found");
-    return;
-  }
 
-  if (!loginEmail || !loginEmail.includes("@")) {
-    toast.error("Valid email is required for renewing subscription");
-    return;
-  }
+    if (!loginEmail || !loginEmail.includes("@")) {
+      toast.error("Valid email is required for renewing subscription");
+      return;
+    }
 
-  try {
-    const { data } = await axios.post(
-      `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
-      {
-        txSignature: signature,
-        solanaPublicKey,
-        email: loginEmail,
-      }
-    );
+    try {
+      const { data } = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/renew-subscription`,
+        {
+          txSignature: signature,
+          solanaPublicKey,
+          email: loginEmail,
+        }
+      );
 
-    toast.success("Subscription successfully renewed!");
-    localStorage.setItem("token", data.token);
-    setUser(data.user);
-    setIsSubscriptionModalOpen(false);
-    router.push("/chat");
-  } catch (err) {
-    console.error("Renew subscription error:", err);
-    toast.error(
-      axios.isAxiosError(err) && err.response?.data?.error
-        ? err.response.data.error
-        : "Error renewing subscription"
-    );
-  }
-};
-
-
+      toast.success("Subscription successfully renewed!");
+      localStorage.setItem("token", data.token);
+      setUser(data.user);
+      setIsSubscriptionModalOpen(false);
+      router.push("/chat");
+    } catch (err) {
+      console.error("Renew subscription error:", err);
+      toast.error(
+        axios.isAxiosError(err) && err.response?.data?.error
+          ? err.response.data.error
+          : "Error renewing subscription"
+      );
+    }
+  };
 
   const handlePromoSuccess = (code: string) => {
     setPromoCode(code);
@@ -176,8 +168,28 @@ export default function RegistrationForm() {
         { params: { email, nickname } }
       );
       return data;
-    } catch (error) {
+    } catch {
       return { emailExists: true, nicknameExists: true };
+    }
+  };
+
+  // Регистрация push-токена на сервере
+  const registerPushToken = async (userId: string, authToken: string) => {
+    try {
+const token = await getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_VAPID as string });
+      if (token) {
+        await axios.post(
+          `${process.env.NEXT_PUBLIC_API_URL}/auth/subscribe`,
+          { userId, pushToken: token },
+          { headers: { Authorization: `Bearer ${authToken}` } }
+        );
+        toast.success('Push notifications enabled');
+      } else {
+        toast.warn('Push token not available');
+      }
+    } catch (error) {
+      console.error('Failed to register push token', error);
+      toast.error('Could not register push notifications');
     }
   };
 
@@ -189,14 +201,13 @@ export default function RegistrationForm() {
       return;
     }
     if (password !== confirmPassword) {
-      toast.error('The passwords dont match');
+      toast.error('The passwords don\'t match');
       return;
     }
 
     setLoading(true);
-
-    // Проверка уникальности email и никнейма
     const { emailExists, nicknameExists } = await checkUnique(email, nickname);
+
     if (emailExists) {
       toast.error('Email is already in use');
       setLoading(false);
@@ -209,32 +220,25 @@ export default function RegistrationForm() {
     }
 
     try {
-      // Если есть валидный промокод — регистрируем без оплаты
       if (promoCode) {
-        const result = await register(
-          nickname,
-          email,
-          password,
-          role,
-          null,
-          null,
-          promoCode
-        );
-
+        const result = await register(nickname, email, password, role, null, null, promoCode);
         setLoading(false);
+if (result.success) {
+  toast.success('Registration successful!');
+if (result.user?.id && result.token) {
+  await registerPushToken(result.user.id, result.token);
 
-        if (result.success) {
-          toast.success('Registration successful!');
-          router.push('/chat');
-        } else {
-          toast.error(result.error || 'Registration error');
-        }
+  } else {
+    console.warn('User info is missing in registration result');
+  }
+  router.push('/chat');
+} else {
+  toast.error(result.error || 'Registration error');
+}
         return;
       }
 
-      // Проводим оплату через Phantom Wallet (одинаково для десктопа и мобильного Phantom браузера)
       const paymentSignature = await handlePhantomPayment();
-
       if (!paymentSignature) {
         toast.error('Payment failed');
         setLoading(false);
@@ -248,7 +252,6 @@ export default function RegistrationForm() {
         return;
       }
 
-      // Регистрация с оплатой
       const result = await register(
         nickname,
         email,
@@ -261,12 +264,17 @@ export default function RegistrationForm() {
 
       setLoading(false);
 
-      if (result.success) {
-        toast.success('Registration successful!');
-        router.push('/chat');
-      } else {
-        toast.error(result.error || 'Registration error');
-      }
+if (result.success) {
+  toast.success('Registration successful!');
+  if (result.user && result.token) {
+    await registerPushToken(result.user.id || result.user.id, result.token);
+  } else {
+    console.warn('User or token is missing, skipping push token registration');
+  }
+  router.push('/chat');
+} else {
+  toast.error(result.error || 'Registration error');
+}
     } catch {
       setLoading(false);
       toast.error('Registration error');
@@ -283,10 +291,7 @@ export default function RegistrationForm() {
       const res = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
         { email: loginEmail, password: loginPassword },
-        {
-          signal: abortControllerRef.current.signal,
-          timeout: 10000,
-        }
+        { signal: abortControllerRef.current.signal, timeout: 10000 }
       );
 
       localStorage.setItem('token', res.data.token);
@@ -304,6 +309,10 @@ export default function RegistrationForm() {
 
       toast.success('Вход выполнен успешно!');
       setIsLoginModalOpen(false);
+
+      // Регистрируем push-токен после логина
+      await registerPushToken(res.data.user._id || res.data.user.id, res.data.token);
+
       router.push('/chat');
     } catch (err: unknown) {
       if (axios.isCancel(err)) {
@@ -313,9 +322,7 @@ export default function RegistrationForm() {
           setIsLoginModalOpen(false);
           setIsSubscriptionModalOpen(true);
         } else {
-          setLoginError(
-            err.response?.data?.error || 'Ошибка входа. Проверьте email и пароль.'
-          );
+          setLoginError(err.response?.data?.error || 'Ошибка входа. Проверьте email и пароль.');
         }
       } else {
         setLoginError('Ошибка входа. Проверьте email и пароль.');
