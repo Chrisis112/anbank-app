@@ -339,7 +339,6 @@ const sendMessage = () => {
 };
 
 const textareaRef = useRef<HTMLTextAreaElement>(null);
-const inputRef = useRef<HTMLInputElement>(null);
 const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
   if (e.key === "Enter" && e.shiftKey) {
     // Shift+Enter — добавить перенос строки в позицию курсора
