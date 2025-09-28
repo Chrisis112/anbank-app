@@ -174,13 +174,13 @@ export default function RegistrationForm() {
   };
 
   // Регистрация push-токена на сервере
- const registerPushToken = async (userId: string, authToken: string) => {
+const registerPushToken = async (userId: string, authToken: string) => {
   try {
     const token = await getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_VAPID as string });
     if (token) {
       await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/auth/subscribe`,
-        { subscription: token, userId },  // Отправляем поле subscription, как ожидает сервер
+        { subscription: token, userId },  // Передаём токен под ключом subscription
         { headers: { Authorization: `Bearer ${authToken}` } }
       );
       toast.success('Push notifications enabled');
