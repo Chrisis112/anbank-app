@@ -1,4 +1,3 @@
-// firebase-config.ts
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
@@ -9,10 +8,10 @@ const firebaseConfig = {
   storageBucket: "anbanktoken-e378c.firebasestorage.app",
   messagingSenderId: "299210750747",
   appId: "1:299210750747:web:4ba5ab63ea75507fdcb1be",
-  measurementId: "G-WDKZB9BCNW"
+  measurementId: "G-WDKZB9BCNW",
 };
 
-let messaging: ReturnType<typeof getMessaging>;
+let messaging: ReturnType<typeof getMessaging> | null = null;
 
 if (typeof window !== "undefined" && "navigator" in window) {
   const app = initializeApp(firebaseConfig);

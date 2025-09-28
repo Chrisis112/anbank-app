@@ -27,6 +27,7 @@ const token = await getToken(messaging, {
   serviceWorkerRegistration: registration,
 });
 
+
           if (token) {
             console.log("FCM Token:", token);
             // Важно: отправьте этот токен на ваш сервер, например:
