@@ -18,11 +18,14 @@ const NotificationPermission = () => {
           const registration = await navigator.serviceWorker.register(
             "/firebase-messaging-sw.js"
           );
+   if (!messaging) {
+  throw new Error('Firebase messaging is not initialized');
+}
 
-          const token = await getToken(messaging, {
-            vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-            serviceWorkerRegistration: registration,
-          });
+const token = await getToken(messaging, {
+  vapidKey: process.env.NEXT_PUBLIC_VAPID as string,
+  serviceWorkerRegistration: registration,
+});
 
           if (token) {
             console.log("FCM Token:", token);
