@@ -176,7 +176,13 @@ export default function RegistrationForm() {
   // Регистрация push-токена на сервере
 const registerPushToken = async (userId: string, authToken: string) => {
   try {
-    const token = await getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_VAPID as string });
+   if (!messaging) {
+  throw new Error('Firebase messaging is not initialized');
+}
+
+const token = await getToken(messaging, {
+  vapidKey: process.env.NEXT_PUBLIC_VAPID as string,
+});
     if (token) {
       await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/auth/subscribe`,
