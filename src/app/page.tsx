@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -63,7 +63,8 @@ export default function HomePage() {
         if (Notification.permission === 'granted') {
           const title = payload.notification?.title ?? 'Уведомление';
           const body = payload.notification?.body ?? '';
-          const chatUrl = payload.data?.url ?? '/';
+          // Жестко идем в /chat, игнорируем URL из payload
+          const chatUrl = '/chat';
 
           // Показываем toast с кликом
           toast.info(
