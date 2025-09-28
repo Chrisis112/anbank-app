@@ -11,6 +11,9 @@ const firebaseConfig = {
   measurementId: "G-WDKZB9BCNW"
 };
 
+// Инициализация Firebase App
+firebase.initializeApp(firebaseConfig);
+
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {

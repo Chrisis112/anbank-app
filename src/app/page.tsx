@@ -15,22 +15,23 @@ if (typeof window !== 'undefined') {
 }
 
 export default function HomePage() {
-  useEffect(() => {
-    if (typeof window !== 'undefined' && messaging) {
-      const unsubscribe = onMessage(messaging, (payload) => {
-        console.log('Foreground message received:', payload);
+useEffect(() => {
+  if (typeof window !== 'undefined' && messaging) {
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log('Foreground message received:', payload);
 
-        if (Notification.permission === 'granted') {
-          new Notification(payload.notification?.title ?? 'Уведомление', {
-            body: payload.notification?.body,
-            icon: payload.notification?.icon || '/favicon.ico',
-          });
-        }
-      });
+      if (Notification.permission === 'granted') {
+        new Notification(payload.notification?.title ?? 'Уведомление', {
+          body: payload.notification?.body,
+          icon: payload.notification?.icon || '/favicon.ico',
+        });
+      }
+    });
 
-      return () => unsubscribe();
-    }
-  }, []);
+    return () => unsubscribe();
+  }
+}, []);
+
 
   return (
     <>
