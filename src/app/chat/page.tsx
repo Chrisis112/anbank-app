@@ -689,7 +689,6 @@ const isAdmin = user?.role?.includes('admin') ?? false;
   </>
 )}
 
-
               {panelType === 'online' && (
                 <>
                   <div className="px-6 pb-2 text-white font-orbitron font-semibold text-xl border-b border-crypto-accent">
