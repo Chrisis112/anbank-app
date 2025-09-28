@@ -99,40 +99,46 @@ const deleteMessage = async (messageId: string) => {
   }
 };
 
+const chatIdRef = useRef(chatId);
 
-  // Инициализация и подписка сокета
-  useEffect(() => {
-    if (!user) return;
-    const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || '', {
-      query: {
-        userId: user.id || user._id,
-        room: chatId,
-      },
-      transports: ['websocket'],
-      withCredentials: true,
-    });
+useEffect(() => {
+  chatIdRef.current = chatId;
+}, [chatId]);
 
-    socketRef.current = socket;
+// Инициализация и подписка сокета (зависит только от user)
+useEffect(() => {
+  if (!user) return;
 
-    socket.on('connect', () => {
-      socket.emit('joinChat', chatId);
-    });
+  const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || '', {
+    query: {
+      userId: user.id || user._id,
+      room: chatIdRef.current,
+    },
+    transports: ['websocket'],
+    withCredentials: true,
+  });
 
-socket.on('newMessage', (msg: Message) => {
-  if (msg.chatId !== chatId) return; // Добавляем фильтр по chatId
-  const messageWithId = {
-    ...msg,
-    id: msg.id ?? (msg as any)._id,
-  };
-  setMessages((prev) => [...prev, messageWithId]);
-});
+  socketRef.current = socket;
 
-socket.on('broadcastMessage', (msg: Message) => {
-  if (msg.chatId !== chatId) return; // Фильтр по chatId
-  setMessages((prev) => [...prev, msg]);
-});
+  socket.on('connect', () => {
+    socket.emit('joinChat', chatIdRef.current);
+  });
 
-const handleReactionUpdate = ({ messageId, reactions }: { messageId: string; reactions: Record<string, number> }) => {
+  socket.on('newMessage', (msg: Message) => {
+    if (msg.chatId !== chatIdRef.current) return;
+    const messageWithId = {
+      ...msg,
+      id: msg.id ?? (msg as any)._id,
+    };
+    setMessages((prev) => [...prev, messageWithId]);
+  });
+
+  socket.on('broadcastMessage', (msg: Message) => {
+    if (msg.chatId !== chatIdRef.current) return;
+    setMessages((prev) => [...prev, msg]);
+  });
+
+  const handleReactionUpdate = ({ messageId, reactions }: { messageId: string; reactions: Record<string, number> }) => {
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id !== messageId) return m;
@@ -150,12 +156,13 @@ const handleReactionUpdate = ({ messageId, reactions }: { messageId: string; rea
   };
 }, [user]);
 
-  // Подписка на другую комнату при смене chatId
-  useEffect(() => {
-    if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit('joinChat', chatId);
-    }
-  }, [chatId]);
+// При изменении chatId сообщаем сокету перейти в другую комнату
+useEffect(() => {
+  if (socketRef.current && socketRef.current.connected) {
+    socketRef.current.emit('joinChat', chatId);
+    chatIdRef.current = chatId; // Обновляем ref тут для безопасности
+  }
+}, [chatId]);
 
 
 const addReaction = (msgId: string | undefined, reaction: string) => {
