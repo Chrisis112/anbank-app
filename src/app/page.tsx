@@ -18,9 +18,6 @@ export default function HomePage() {
   const user = useAuthStore(state => state.user);
   const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
-  // Для отслеживания уже показанных уведомлений и предотвращения дублей
-  const seenNotifications = useRef(new Set<string>());
-
   // Регистрация и обновление push-токена при изменении user или токена авторизации
   useEffect(() => {
     async function registerPushToken() {
@@ -48,29 +45,30 @@ export default function HomePage() {
     registerPushToken();
   }, [user, authToken]);
 
-  // Обработка foreground сообщений с фильтрацией дубликатов
-  useEffect(() => {
-    if (typeof window !== 'undefined' && messaging) {
-      const unsubscribe = onMessage(messaging, (payload) => {
-        console.log('Foreground message received:', payload);
-const notifId = payload.messageId || (payload.notification && (payload.notification as any)['tag']);
-        if (notifId && seenNotifications.current.has(notifId)) {
-          console.log('Duplicate notification ignored', notifId);
-          return;
-        }
-        if (notifId) seenNotifications.current.add(notifId);
+const seenNotifications = useRef(new Set<string>());
 
-        if (Notification.permission === 'granted') {
-          new Notification(payload.notification?.title ?? 'Уведомление', {
-            body: payload.notification?.body,
-            icon: payload.notification?.icon || '/favicon.ico',
-          });
-        }
-      });
+useEffect(() => {
+  if (typeof window !== 'undefined' && messaging) {
+    const unsubscribe = onMessage(messaging, (payload) => {
+      const notifId = payload.messageId || (payload.notification && (payload.notification as any).tag);
+      if (notifId && seenNotifications.current.has(notifId)) {
+        console.log('Duplicate notification ignored', notifId);
+        return;
+      }
+      if (notifId) seenNotifications.current.add(notifId);
 
-      return () => unsubscribe();
-    }
-  }, []);
+      if (Notification.permission === 'granted') {
+        new Notification(payload.notification?.title ?? 'Уведомление', {
+          body: payload.notification?.body,
+          icon: payload.notification?.icon || '/favicon.ico',
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }
+}, []);
+
 
   return (
     <>
