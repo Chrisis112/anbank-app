@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import RegistrationForm from '../components/auth/RegistrationForm';
 import NotificationPermission from '@/components/auth/NotificationPermission';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { Buffer } from 'buffer';
 import { messaging, onMessage, getToken } from '@/utils/firebase-config';
 import axios from 'axios';
@@ -15,8 +16,11 @@ if (typeof window !== 'undefined') {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const user = useAuthStore(state => state.user);
   const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+  const seenNotifications = useRef(new Set<string>());
 
   // Регистрация и обновление push-токена при изменении user или токена авторизации
   useEffect(() => {
@@ -45,30 +49,43 @@ export default function HomePage() {
     registerPushToken();
   }, [user, authToken]);
 
-const seenNotifications = useRef(new Set<string>());
+  // Обработка foreground сообщений с показом toast и переходом по клику
+  useEffect(() => {
+    if (typeof window !== 'undefined' && messaging) {
+      const unsubscribe = onMessage(messaging, (payload) => {
+        const notifId = payload.messageId || (payload.notification && (payload.notification as any).tag);
+        if (notifId && seenNotifications.current.has(notifId)) {
+          console.log('Duplicate notification ignored', notifId);
+          return;
+        }
+        if (notifId) seenNotifications.current.add(notifId);
 
-useEffect(() => {
-  if (typeof window !== 'undefined' && messaging) {
-    const unsubscribe = onMessage(messaging, (payload) => {
-      const notifId = payload.messageId || (payload.notification && (payload.notification as any).tag);
-      if (notifId && seenNotifications.current.has(notifId)) {
-        console.log('Duplicate notification ignored', notifId);
-        return;
-      }
-      if (notifId) seenNotifications.current.add(notifId);
+        if (Notification.permission === 'granted') {
+          const title = payload.notification?.title ?? 'Уведомление';
+          const body = payload.notification?.body ?? '';
+          const chatUrl = payload.data?.url ?? '/';
 
-      if (Notification.permission === 'granted') {
-        new Notification(payload.notification?.title ?? 'Уведомление', {
-          body: payload.notification?.body,
-          icon: payload.notification?.icon || '/favicon.ico',
-        });
-      }
-    });
+          toast.info(
+            <div style={{ cursor: 'pointer' }}>
+              <strong>{title}</strong>
+              <div>{body}</div>
+            </div>,
+            {
+              onClick: () => {
+                window.focus();
+                router.push(chatUrl);
+                toast.dismiss();
+              },
+              autoClose: 5000,
+              closeOnClick: true,
+            }
+          );
+        }
+      });
 
-    return () => unsubscribe();
-  }
-}, []);
-
+      return () => unsubscribe();
+    }
+  }, [router]);
 
   return (
     <>
