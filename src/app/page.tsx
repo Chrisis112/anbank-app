@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -19,6 +19,7 @@ export default function HomePage() {
   const router = useRouter();
   const user = useAuthStore(state => state.user);
   const authToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
   const seenNotifications = useRef(new Set<string>());
 
   // Регистрация и обновление push-токена при изменении user или токена авторизации
@@ -44,13 +45,14 @@ export default function HomePage() {
         console.error('Failed to register push token:', error);
       }
     }
+
     registerPushToken();
   }, [user, authToken]);
 
-  // Обработка foreground сообщений с показом toast и навигацией по клику
+  // Обработка foreground сообщений с показом toast и нативного уведомления с кликом
   useEffect(() => {
     if (typeof window !== 'undefined' && messaging) {
-      const unsubscribe = onMessage(messaging, async (payload) => {
+      const unsubscribe = onMessage(messaging, (payload) => {
         const notifId = payload.messageId || (payload.notification && (payload.notification as any).tag);
         if (notifId && seenNotifications.current.has(notifId)) {
           console.log('Duplicate notification ignored', notifId);
@@ -61,34 +63,9 @@ export default function HomePage() {
         if (Notification.permission === 'granted') {
           const title = payload.notification?.title ?? 'Уведомление';
           const body = payload.notification?.body ?? '';
+          const chatUrl = payload.data?.url ?? '/';
 
-          // Допустим, в data есть поле otherUserId для ЛС
-          const otherUserId = payload.data?.otherUserId;
-
-          // Функция перехода в ЛС
-          async function openPrivateChat(userId: string) {
-            try {
-              if (!authToken) throw new Error("No auth token");
-
-              const res = await axios.post(
-                `${process.env.NEXT_PUBLIC_API_URL}/private/chats/create-or-get`,
-                { otherUserId: userId },
-                { headers: { Authorization: `Bearer ${authToken}` } }
-              );
-
-              const chatId = res.data?.chatId;
-              if (chatId) {
-                router.push(`/chat/${chatId}`);
-              } else {
-                router.push('/chat');
-              }
-            } catch (err) {
-              console.error("Failed to open private chat", err);
-              router.push('/chat');
-            }
-          }
-
-          // Показываем toast с обработкой клика
+          // Показываем toast с кликом
           toast.info(
             <div style={{ cursor: 'pointer' }}>
               <strong>{title}</strong>
@@ -97,11 +74,7 @@ export default function HomePage() {
             {
               onClick: () => {
                 window.focus();
-                if (otherUserId) {
-                  openPrivateChat(otherUserId);
-                } else {
-                  router.push('/chat');
-                }
+                router.push(chatUrl);
                 toast.dismiss();
               },
               autoClose: 5000,
@@ -109,19 +82,16 @@ export default function HomePage() {
             }
           );
 
-          // Создаем нативное уведомление
+          // Также создаём нативное уведомление
           const notification = new Notification(title, {
             body,
             icon: payload.notification?.icon || '/favicon.ico',
           });
 
+          // Клик на нативном уведомлении переводит в чат
           notification.onclick = () => {
             window.focus();
-            if (otherUserId) {
-              openPrivateChat(otherUserId);
-            } else {
-              router.push('/chat');
-            }
+            router.push(chatUrl);
             notification.close();
           };
         }
@@ -129,7 +99,7 @@ export default function HomePage() {
 
       return () => unsubscribe();
     }
-  }, [router, authToken]);
+  }, [router]);
 
   return (
     <>
