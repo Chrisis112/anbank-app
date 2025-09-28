@@ -17,7 +17,7 @@ import {
 } from '@solana/web3.js';
 import { messaging } from '@/utils/firebase-config'; // Импорт Firebase Messaging для push-токена
 
-type Role = 'newbie' | 'advertiser' | 'creator';
+type Role = 'newbie' | 'advertiser' | 'creator'| 'admin';
 
 export default function RegistrationForm() {
   const router = useRouter();
