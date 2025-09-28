@@ -49,58 +49,6 @@ export default function HomePage() {
     registerPushToken();
   }, [user, authToken]);
 
-  // Обработка foreground сообщений с показом toast и нативного уведомления с кликом
-  useEffect(() => {
-    if (typeof window !== 'undefined' && messaging) {
-      const unsubscribe = onMessage(messaging, (payload) => {
-        const notifId = payload.messageId || (payload.notification && (payload.notification as any).tag);
-        if (notifId && seenNotifications.current.has(notifId)) {
-          console.log('Duplicate notification ignored', notifId);
-          return;
-        }
-        if (notifId) seenNotifications.current.add(notifId);
-
-        if (Notification.permission === 'granted') {
-          const title = payload.notification?.title ?? 'Уведомление';
-          const body = payload.notification?.body ?? '';
-          // Жестко идем в /chat, игнорируем URL из payload
-          const chatUrl = '/chat';
-
-          // Показываем toast с кликом
-          toast.info(
-            <div style={{ cursor: 'pointer' }}>
-              <strong>{title}</strong>
-              <div>{body}</div>
-            </div>,
-            {
-              onClick: () => {
-                window.focus();
-                router.push(chatUrl);
-                toast.dismiss();
-              },
-              autoClose: 5000,
-              closeOnClick: true,
-            }
-          );
-
-          // Также создаём нативное уведомление
-          const notification = new Notification(title, {
-            body,
-            icon: payload.notification?.icon || '/favicon.ico',
-          });
-
-          // Клик на нативном уведомлении переводит в чат
-          notification.onclick = () => {
-            window.focus();
-            router.push(chatUrl);
-            notification.close();
-          };
-        }
-      });
-
-      return () => unsubscribe();
-    }
-  }, [router]);
 
   return (
     <>

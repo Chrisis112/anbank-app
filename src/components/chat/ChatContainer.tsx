@@ -119,18 +119,19 @@ const deleteMessage = async (messageId: string) => {
     });
 
 socket.on('newMessage', (msg: Message) => {
-  // Проверяем и подставляем id из _id, если id нет
+  if (msg.chatId !== chatId) return; // Добавляем фильтр по chatId
   const messageWithId = {
     ...msg,
     id: msg.id ?? (msg as any)._id,
   };
-
   setMessages((prev) => [...prev, messageWithId]);
 });
 
-      socket.on('broadcastMessage', (msg: Message) => {
-    setMessages((prev) => [...prev, msg]);
-  });
+socket.on('broadcastMessage', (msg: Message) => {
+  if (msg.chatId !== chatId) return; // Фильтр по chatId
+  setMessages((prev) => [...prev, msg]);
+});
+
 const handleReactionUpdate = ({ messageId, reactions }: { messageId: string; reactions: Record<string, number> }) => {
     setMessages((prev) =>
       prev.map((m) => {
@@ -435,7 +436,6 @@ const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
      <div className="flex flex-col w-full h-full bg-gray-900 text-white">
     <div className="flex-1 overflow-y-auto p-4 space-y-3">
 {messages.map(msg => {
-  const sender = userCache[msg.senderId];
   const isSenderOnline = Array.isArray(onlineUsers)
     ? onlineUsers.some(u => u.id === msg.senderId)
     : false;
