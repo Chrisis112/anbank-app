@@ -174,24 +174,25 @@ export default function RegistrationForm() {
   };
 
   // Регистрация push-токена на сервере
-  const registerPushToken = async (userId: string, authToken: string) => {
-    try {
-const token = await getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_VAPID as string });
-      if (token) {
-        await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/subscribe`,
-          { userId, pushToken: token },
-          { headers: { Authorization: `Bearer ${authToken}` } }
-        );
-        toast.success('Push notifications enabled');
-      } else {
-        toast.warn('Push token not available');
-      }
-    } catch (error) {
-      console.error('Failed to register push token', error);
-      toast.error('Could not register push notifications');
+ const registerPushToken = async (userId: string, authToken: string) => {
+  try {
+    const token = await getToken(messaging, { vapidKey: process.env.NEXT_PUBLIC_VAPID as string });
+    if (token) {
+      await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/subscribe`,
+        { subscription: token, userId },  // Отправляем поле subscription, как ожидает сервер
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+      toast.success('Push notifications enabled');
+    } else {
+      toast.warn('Push token not available');
     }
-  };
+  } catch (error) {
+    console.error('Failed to register push token', error);
+    toast.error('Could not register push notifications');
+  }
+};
+
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
