@@ -11,34 +11,47 @@ const firebaseConfig = {
   measurementId: "G-WDKZB9BCNW"
 };
 
-// Инициализация Firebase App
+// Инициализация Firebase
 firebase.initializeApp(firebaseConfig);
-
-// Принудительный переход сервис-воркера в активное состояние
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-});
 
 const messaging = firebase.messaging();
 
+const seenNotifications = new Set();
+
+// Обработка фоновых сообщений
 messaging.onBackgroundMessage(function(payload) {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification.title;
+
+  // Уникальный идентификатор уведомления — messageId или tag
+  const notifId = payload.messageId || (payload.notification && payload.notification.tag);
+
+  if (notifId && seenNotifications.has(notifId)) {
+    console.log('[firebase-messaging-sw.js] Duplicate notification ignored:', notifId);
+    return;
+  }
+  if (notifId) {
+    seenNotifications.add(notifId);
+  }
+
+  const notificationTitle = payload.notification?.title || 'Уведомление';
   const notificationOptions = {
-    body: payload.notification.body,
-    icon: payload.notification.icon,
-    badge: payload.notification.badge,
+    body: payload.notification?.body || '',
+    icon: payload.notification?.icon || '/firebase-logo.png',
+    badge: payload.notification?.badge,
     data: payload.data,
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
+// Обработка клика по уведомлению
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
+
   const url = event.notification.data?.url || '/';
+
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(windowClients => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
       for (const client of windowClients) {
         if (client.url === url && 'focus' in client) {
           return client.focus();
