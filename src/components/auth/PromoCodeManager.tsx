@@ -265,7 +265,7 @@ export default function PromoCodeManager() {
 
       {/* Панель управления */}
       <div className="bg-crypto-input rounded-lg p-4 mb-6">
-        <div className="flex flex-wrap gap-4 items-center justify-between">
+        <div className="flex flex-wrap gap-4 items-center justify-between w-full">
           <div className="flex gap-4">
             <button
               onClick={() => setShowCreateModal(true)}
@@ -315,13 +315,13 @@ export default function PromoCodeManager() {
               <table className="w-full">
                 <thead className="bg-crypto-accent text-white">
                   <tr>
-                    <th className="p-4 text-left font-semibold">Код</th>
-                    <th className="p-4 text-left font-semibold">Описание</th>
-                    <th className="p-4 text-left font-semibold">Использования</th>
-                    <th className="p-4 text-left font-semibold">Статус</th>
-                    <th className="p-4 text-left font-semibold">Период действия</th>
-                    <th className="p-4 text-left font-semibold">Создан</th>
-                    <th className="p-4 text-left font-semibold">Действия</th>
+                    <th className="min-w-[90px] p-4 text-left font-semibold">Код</th>
+                    <th className="min-w-[90px] p-4 text-left font-semibold">Описание</th>
+                    <th className="min-w-[90px] p-4 text-left font-semibold">Использования</th>
+                    <th className="min-w-[90px] p-4 text-left font-semibold">Статус</th>
+                    <th className="min-w-[90px] p-4 text-left font-semibold">Период действия</th>
+                    <th className="min-w-[90px] p-4 text-left font-semibold">Создан</th>
+                    <th className="min-w-[90px] p-4 text-left font-semibold">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -336,7 +336,7 @@ export default function PromoCodeManager() {
                       const status = getCodeStatus(code);
                       return (
                         <tr key={code._id} className="border-b border-gray-600 hover:bg-crypto-dark transition-colors">
-                          <td className="p-4">
+                          <td className="p-4 min-w-[90px] ">
                             <div className="flex items-center gap-2">
                               <span className="font-mono font-bold text-crypto-accent text-lg">
                                 {code.code}
@@ -350,12 +350,12 @@ export default function PromoCodeManager() {
                               </button>
                             </div>
                           </td>
-                          <td className="p-4">
+                          <td className="min-w-[90px] p-4">
                             <div className="max-w-xs">
                               {code.description || <span className="text-gray-500">—</span>}
                             </div>
                           </td>
-                          <td className="p-4">
+                          <td className="min-w-[90px] p-4">
                             <div className="flex items-center gap-2">
                               <span className={`font-semibold ${code.usedCount >= code.usageLimit ? 'text-red-400' : 'text-green-400'}`}>
                                 {code.usedCount}/{code.usageLimit}
@@ -368,12 +368,12 @@ export default function PromoCodeManager() {
                               </div>
                             </div>
                           </td>
-                          <td className="p-4">
+                          <td className="min-w-[90px] p-4">
                             <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(status)}`}>
                               {getStatusText(status)}
                             </span>
                           </td>
-                          <td className="p-4 text-sm">
+                          <td className="min-w-[90px] p-4 text-sm">
                             {code.validFrom && (
                               <div>С: {new Date(code.validFrom).toLocaleDateString()}</div>
                             )}
@@ -384,10 +384,10 @@ export default function PromoCodeManager() {
                               <span className="text-gray-500">Без ограничений</span>
                             )}
                           </td>
-                          <td className="p-4 text-sm text-gray-400">
+                          <td className="min-w-[90px] p-4 text-sm text-gray-400">
                             {new Date(code.createdAt).toLocaleDateString()}
                           </td>
-                          <td className="p-4">
+                          <td className="min-w-[90px] p-4">
                             <div className="flex gap-2">
                               <button
                                 onClick={() => openEditModal(code)}

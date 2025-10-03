@@ -550,87 +550,111 @@ const isAdmin = user?.role?.includes('admin') ?? false;
       <div className="relative z-10 flex flex-1 flex-col md:flex-row overflow-hidden">
 <nav
   className="
-    w-full
-    bg-gradient-to-br from-crypto-input to-crypto-dark border-b border-crypto-accent
-    px-2 py-3 flex flex-row flex-wrap gap-2 items-center justify-center
-    md:flex-col md:gap-3 md:justify-start
+    w-full md:w-64 min-w-[220px] 
+    bg-gradient-to-br from-crypto-input to-crypto-dark border-b md:border-b-0 md:border-r border-crypto-accent 
+    px-2 md:px-4 py-2 md:py-8 flex flex-wrap md:flex-col gap-1 md:gap-3 items-center justify-center md:justify-start
   "
 >
-          <button
-            onClick={closeChat}
-            className="flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg font-orbitron text-base md:text-lg font-semibold transition bg-transparent text-gray-300 hover:bg-blue-700 hover:text-white"
-          >
-            General chat
-          </button>
-                        {/* Кнопка открытия TokenCreator */}
-<button
-  onClick={() => {
-    setPanelType('profile');
-    setPanelOpen(true);
-    setShowTokenCreator(true);
-  }}
-  className="w-full flex items-center justify-center gap-3 px-3 py-3 rounded-lg bg-gradient-to-r from-crypto-accent to-blue-500 text-crypto-dark font-orbitron text-lg font-semibold transition hover:opacity-90"
->
-  <FaCoins className="text-crypto-dark" />
-  Create a token
-</button>
+  <button
+    onClick={closeChat}
+    className="
+      w-[48%] md:w-full flex items-center justify-center md:justify-start
+      gap-1 md:gap-3 px-2 py-2 md:px-3 md:py-3 rounded-lg font-orbitron
+      text-xs md:text-lg font-semibold transition bg-transparent text-gray-300
+      hover:bg-blue-700 hover:text-white truncate
+    "
+  >
+    General
+  </button>
 
+  <button
+    onClick={() => {
+      setPanelType('profile');
+      setPanelOpen(true);
+      setShowTokenCreator(true);
+    }}
+    className="
+      w-[48%] md:w-full flex items-center justify-center md:justify-start
+      gap-1 md:gap-3 px-2 py-2 md:px-3 md:py-3 rounded-lg font-orbitron
+      text-xs md:text-lg font-semibold transition
+      bg-gradient-to-r from-crypto-accent to-blue-500 text-crypto-dark md:text-gray-300
+      hover:opacity-90 truncate
+    "
+  >
+    <FaCoins className="text-crypto-dark md:text-crypto-accent" />
+    <span className="truncate">Create</span>
+    <span className="hidden md:inline"> a token</span>
+  </button>
 
-          <button
-            onClick={() => openPanel('pm')}
-            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg font-orbitron text-base md:text-lg font-semibold transition
-              ${panelOpen && panelType === 'pm'
-                ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#192342_100%)] text-white'
-                : 'bg-transparent text-gray-300 hover:bg-blue-900 hover:text-white'}
-              `}
-          >
-            <FaEnvelope className="text-crypto-accent" />
-            <span className="hidden md:inline">Personal Messages</span>
-            <span className="inline md:hidden">PM</span>
-          </button>
+  <button
+    onClick={() => openPanel('pm')}
+    className={`
+      w-[24%] md:w-full flex items-center justify-center md:justify-start
+      gap-1 md:gap-3 px-2 py-2 md:px-3 md:py-3 rounded-lg font-orbitron 
+      text-xs md:text-lg font-semibold transition 
+      ${panelOpen && panelType === 'pm'
+        ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#192342_100%)] text-white'
+        : 'bg-transparent text-gray-300 hover:bg-blue-900 hover:text-white'}
+      truncate
+    `}
+  >
+    <FaEnvelope className="text-crypto-accent" />
+    <span className="truncate">PM</span>
+    <span className="hidden md:inline"> Personal</span>
+  </button>
 
-          <button
-            onClick={() => openPanel('online')}
-            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg font-orbitron text-base md:text-lg font-semibold transition
-              ${panelOpen && panelType === 'online'
-                ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#192342_100%)] text-white'
-                : 'bg-transparent text-gray-300 hover:bg-blue-900 hover:text-white'}
-              `}
-          >
-            <FaUserFriends className="text-crypto-accent" />
-            <span className="hidden md:inline">Online Users</span>
-            <span className="inline md:hidden">Online</span>
-          </button>
+  <button
+    onClick={() => openPanel('online')}
+    className={`
+      w-[24%] md:w-full flex items-center justify-center md:justify-start
+      gap-1 md:gap-3 px-2 py-2 md:px-3 md:py-3 rounded-lg font-orbitron 
+      text-xs md:text-lg font-semibold transition
+      ${panelOpen && panelType === 'online'
+        ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#192342_100%)] text-white'
+        : 'bg-transparent text-gray-300 hover:bg-blue-900 hover:text-white'}
+      truncate
+    `}
+  >
+    <FaUserFriends className="text-crypto-accent" />
+    <span className="truncate">Online</span>
+    <span className="hidden md:inline"> Users</span>
+  </button>
 
-          <button
-            onClick={() => openPanel('profile')}
-            className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg font-orbitron text-base md:text-lg font-semibold transition
-              ${panelOpen && panelType === 'profile'
-                ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#00c0ff_100%)] text-white'
-                : 'bg-transparent text-gray-300 hover:bg-blue-500 hover:text-white'}
-              `}
-          >
-            <FaUser className="text-crypto-accent" />
-            <span className="hidden md:inline">My Profile</span>
-            <span className="inline md:hidden">Profile</span>
-          </button>
+  <button
+    onClick={() => openPanel('profile')}
+    className={`
+      w-[24%] md:w-full flex items-center justify-center md:justify-start
+      gap-1 md:gap-3 px-2 py-2 md:px-3 md:py-3 rounded-lg font-orbitron 
+      text-xs md:text-lg font-semibold transition
+      ${panelOpen && panelType === 'profile'
+        ? 'bg-[linear-gradient(90deg,#21e0ff_0%,#00c0ff_100%)] text-white'
+        : 'bg-transparent text-gray-300 hover:bg-blue-500 hover:text-white'}
+      truncate
+    `}
+  >
+    <FaUser className="text-crypto-accent" />
+    <span className="truncate">Profile</span>
+  </button>
 
-          {/* Кнопка админ-панели - показывается только админам */}
-          {isAdmin && (
-            <button
-              onClick={() => openPanel('admin')}
-              className={`flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg font-orbitron text-base md:text-lg font-semibold transition
-                ${panelOpen && panelType === 'admin'
-                  ? 'bg-[linear-gradient(90deg,#ff6b35_0%,#f7931e_100%)] text-white'
-                  : 'bg-transparent text-gray-300 hover:bg-orange-600 hover:text-white'}
-                `}
-            >
-              <FaCog className="text-orange-400" />
-              <span className="hidden md:inline">Admin Panel</span>
-              <span className="inline md:hidden">Admin</span>
-            </button>
-          )}
-        </nav>
+  {isAdmin && (
+    <button
+      onClick={() => openPanel('admin')}
+      className={`
+        w-[48%] md:w-full flex items-center justify-center md:justify-start
+        gap-1 md:gap-3 px-2 py-2 md:px-3 md:py-3 rounded-lg font-orbitron 
+        text-xs md:text-lg font-semibold transition
+        ${panelOpen && panelType === 'admin'
+          ? 'bg-[linear-gradient(90deg,#ff6b35_0%,#f7931e_100%)] text-white'
+          : 'bg-transparent text-gray-300 hover:bg-orange-600 hover:text-white'}
+        truncate
+      `}
+    >
+      <FaCog className="text-orange-400" />
+      <span className="truncate">Admin</span>
+      <span className="hidden md:inline"> Panel</span>
+    </button>
+  )}
+</nav>
 
         <div className="relative z-10 flex flex-1 flex-col md:flex-row overflow-hidden">
           {panelOpen && panelType && (
