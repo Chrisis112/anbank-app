@@ -19,19 +19,22 @@ export default function Header() {
           rel="stylesheet"
         />
       </Head>
-      <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3">
-        {/* Логотип и Forum */}
-        <div className="flex items-center">
-          <img src="/favicon.ico" alt="Logo" className="h-8 w-8 mr-2" />
-          <span className="font-bold text-lg mr-6">ANBT</span>
-          {/* Forum - всегда справа от логотипа */}
-          <Link
-            href="/forum"
-            className="hover:text-indigo-400 transition-colors text-base"
-          >
-            Forum
-          </Link>
-        </div>
+<div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3">
+  {/* Логотип и Forum */}
+  <div className="flex items-center">
+    <Link href="/chat" className="flex items-center cursor-pointer">
+      <img src="/favicon.ico" alt="Logo" className="h-8 w-8 mr-2" />
+      <span className="font-bold text-lg mr-6">ANBT</span>
+    </Link>
+    {/* Forum - всегда справа от логотипа */}
+    <Link
+      href="/forum"
+      className="hover:text-indigo-400 transition-colors text-base"
+    >
+      Forum
+    </Link>
+  </div>
+
 
         {/* Десктоп меню - только Profile */}
         <nav className="hidden md:flex items-center gap-6">
