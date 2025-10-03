@@ -386,10 +386,16 @@ const isAdmin = user?.role?.includes('admin') ?? false;
     }
   };
 
-  function openPanel(type: 'pm' | 'online' | 'profile' | 'admin') {
-    setPanelType(type);
+function openPanel(type: 'pm' | 'online' | 'profile' | 'admin') {
+  if (panelOpen && panelType === type) {
+    setPanelOpen(false);
+    setPanelType(null);
+    setSelectedChatId(null);
+  } else {
     setPanelOpen(true);
+    setPanelType(type);
   }
+}
 
   function closeChat() {
     setSelectedChatId(null);
