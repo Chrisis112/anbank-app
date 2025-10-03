@@ -487,15 +487,6 @@ const isAdmin = user?.role?.includes('admin') ?? false;
               />
             </label>
 
-            {/* Кнопка открытия TokenCreator */}
-            <button
-              onClick={() => setShowTokenCreator(true)}
-              className="w-full flex items-center justify-center gap-3 px-3 py-3 rounded-lg bg-gradient-to-r from-crypto-accent to-blue-500 text-crypto-dark font-orbitron text-lg font-semibold transition hover:opacity-90"
-            >
-              <FaCoins className="text-crypto-dark" />
-              Create a token
-            </button>
-
             <button
               onClick={onLogout}
               className="flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg bg-red-600 text-white font-orbitron text-base md:text-lg font-semibold transition hover:bg-red-700"
@@ -528,6 +519,7 @@ const isAdmin = user?.role?.includes('admin') ?? false;
       </div>
     );
   }
+
   // Стилизованный компонент AdminPanel для PromoCodeManager
   function AdminPanel() {
     return (
@@ -556,17 +548,33 @@ const isAdmin = user?.role?.includes('admin') ?? false;
       </div>
 
       <div className="relative z-10 flex flex-1 flex-col md:flex-row overflow-hidden">
-        <nav
-          className="w-full md:w-64 min-w-[220px]
-            bg-gradient-to-br from-crypto-input to-crypto-dark border-b md:border-b-0 md:border-r border-crypto-accent
-            px-2 md:px-4 py-3 md:py-8 flex md:flex-col flex-row gap-2 md:gap-3 items-center justify-center md:justify-start"
-        >
+<nav
+  className="
+    w-full
+    bg-gradient-to-br from-crypto-input to-crypto-dark border-b border-crypto-accent
+    px-2 py-3 flex flex-row flex-wrap gap-2 items-center justify-center
+    md:flex-col md:gap-3 md:justify-start
+  "
+>
           <button
             onClick={closeChat}
             className="flex-1 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-3 rounded-lg font-orbitron text-base md:text-lg font-semibold transition bg-transparent text-gray-300 hover:bg-blue-700 hover:text-white"
           >
             General chat
           </button>
+                        {/* Кнопка открытия TokenCreator */}
+<button
+  onClick={() => {
+    setPanelType('profile');
+    setPanelOpen(true);
+    setShowTokenCreator(true);
+  }}
+  className="w-full flex items-center justify-center gap-3 px-3 py-3 rounded-lg bg-gradient-to-r from-crypto-accent to-blue-500 text-crypto-dark font-orbitron text-lg font-semibold transition hover:opacity-90"
+>
+  <FaCoins className="text-crypto-dark" />
+  Create a token
+</button>
+
 
           <button
             onClick={() => openPanel('pm')}
